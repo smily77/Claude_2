@@ -17,29 +17,32 @@ void setup() {
   auto cfg = M5.config();
   M5.begin(cfg);
 
-  // Display-Hintergrund auf schwarz setzen
-  M5.Display.fillScreen(BLACK);
+  // Display-Hintergrund mit Farbverlauf erstellen
+  M5.Display.fillScreen(TFT_BLACK);
 
-  // Textgröße setzen (1-7 möglich)
-  M5.Display.setTextSize(3);
+  // Dekorativer Header-Bereich
+  M5.Display.fillRect(0, 0, 320, 50, TFT_NAVY);
+  M5.Display.fillRect(0, 50, 320, 3, TFT_CYAN);
 
-  // Textfarbe setzen (weiß auf schwarz)
-  M5.Display.setTextColor(WHITE);
+  // Haupttext "Hallo Welt!" mit großem, schönem Font
+  M5.Display.setFont(&fonts::FreeSansBold24pt7b);
+  M5.Display.setTextColor(TFT_CYAN);
+  M5.Display.setTextDatum(middle_center);  // Zentriert horizontal und vertikal
+  M5.Display.drawString("Hallo Welt!", 160, 120);
 
-  // Text zentrieren und anzeigen
-  M5.Display.setCursor(80, 110);
-  M5.Display.println("Hallo Welt!");
+  // Untertitel mit elegantem Font
+  M5.Display.setFont(&fonts::FreeSans12pt7b);
+  M5.Display.setTextColor(TFT_LIGHTGREY);
+  M5.Display.drawString("M5Stack Core2", 160, 170);
 
-  // Zusätzliche Information anzeigen
-  M5.Display.setTextSize(2);
-  M5.Display.setCursor(40, 150);
-  M5.Display.setTextColor(GREEN);
-  M5.Display.println("M5Stack Core2");
+  // Info-Text unten
+  M5.Display.setFont(&fonts::FreeSans9pt7b);
+  M5.Display.setTextColor(TFT_GREENYELLOW);
+  M5.Display.drawString("powered by M5Unified", 160, 210);
 
-  M5.Display.setTextSize(1);
-  M5.Display.setCursor(60, 180);
-  M5.Display.setTextColor(YELLOW);
-  M5.Display.println("mit M5Unified");
+  // Dekorative Linie am unteren Rand
+  M5.Display.fillRect(0, 227, 320, 3, TFT_CYAN);
+  M5.Display.fillRect(0, 230, 320, 10, TFT_NAVY);
 }
 
 void loop() {
