@@ -1,7 +1,9 @@
-# M5Stack Core2 - Hallo Welt
+# M5Stack Core2 - Hallo Welt mit Bildern
 
-Ein einfaches Arduino-Programm für den M5Stack Core2, das "Hallo Welt" auf dem Display anzeigt.
+Ein Arduino-Programm für den M5Stack Core2, das "Hallo Welt" mit einem Bild auf dem Display anzeigt.
 Verwendet die M5Unified Bibliothek für maximale Kompatibilität mit allen M5Stack Geräten.
+
+**Neu:** Zeigt ein echtes Bild (JPEG) auf dem Display an!
 
 ## Voraussetzungen
 
@@ -49,10 +51,23 @@ Verwendet die M5Unified Bibliothek für maximale Kompatibilität mit allen M5Sta
 ## Was macht das Programm?
 
 - Initialisiert den M5Stack Core2 mit M5Unified
-- Setzt den Hintergrund auf schwarz
-- Zeigt "Hallo Welt!" in weißer Schrift an
-- Zeigt "M5Stack Core2" in grüner Schrift an
-- Zeigt "mit M5Unified" in gelber Schrift an
+- Zeigt ein professionelles Design mit:
+  - Schönen TrueType Fonts (FreeSansBold, FreeSans)
+  - Dekorativem Header und Footer
+  - Farbschema in Cyan, Navy, Grau und Gelb
+- **Zeigt ein JPEG-Bild an** (eingebettetes 80x80px Icon)
+- Text: "Hallo Welt!" mit Untertitel und Info
+
+## Eigene Bilder hinzufügen
+
+Siehe **[BILDER_ANLEITUNG.md](M5_Hello_World/BILDER_ANLEITUNG.md)** für eine komplette Anleitung:
+1. Bild aus dem Internet herunterladen
+2. Auf passende Größe skalieren (z.B. 80x80px)
+3. Als JPEG speichern
+4. Mit Online-Tool in C-Array konvertieren
+5. In `image_data.h` einfügen
+
+**Tool zum Konvertieren**: https://notisrac.github.io/FileToCArray/
 
 ## Fehlerbehebung
 
