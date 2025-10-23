@@ -12,6 +12,48 @@
 
 #include <M5Unified.h>
 
+// Funktion zum Zeichnen einer stilisierten Weltkugel
+void drawGlobe(int x, int y, int radius) {
+  // Schatten für 3D-Effekt
+  M5.Display.fillCircle(x + 3, y + 3, radius, TFT_DARKGREY);
+
+  // Hauptkugel (Ozean-Blau)
+  M5.Display.fillCircle(x, y, radius, TFT_BLUE);
+
+  // Highlight für glänzenden Effekt
+  M5.Display.fillCircle(x - radius/3, y - radius/3, radius/4, TFT_SKYBLUE);
+
+  // Längengrade (vertikal)
+  for (int i = -radius; i <= radius; i += radius/2) {
+    M5.Display.drawLine(x + i, y - radius, x + i, y + radius, TFT_CYAN);
+  }
+
+  // Breitengrade (horizontal) - als Ellipsen für 3D-Effekt
+  M5.Display.drawEllipse(x, y - radius/2, radius, radius/4, TFT_CYAN);
+  M5.Display.drawEllipse(x, y, radius, radius/2, TFT_CYAN);
+  M5.Display.drawEllipse(x, y + radius/2, radius, radius/4, TFT_CYAN);
+
+  // Äquator hervorheben
+  M5.Display.drawEllipse(x, y, radius, radius/2, TFT_YELLOW);
+  M5.Display.drawEllipse(x, y, radius-1, radius/2-1, TFT_YELLOW);
+
+  // Kontinente (vereinfacht als grüne Formen)
+  // Europa/Afrika
+  M5.Display.fillCircle(x - radius/4, y - radius/6, radius/5, TFT_GREEN);
+  M5.Display.fillCircle(x - radius/6, y + radius/4, radius/6, TFT_GREEN);
+
+  // Amerika
+  M5.Display.fillCircle(x + radius/3, y - radius/5, radius/7, TFT_DARKGREEN);
+  M5.Display.fillCircle(x + radius/2, y + radius/3, radius/8, TFT_DARKGREEN);
+
+  // Asien
+  M5.Display.fillCircle(x - radius/2, y, radius/6, TFT_GREENYELLOW);
+
+  // Rand der Kugel
+  M5.Display.drawCircle(x, y, radius, TFT_CYAN);
+  M5.Display.drawCircle(x, y, radius-1, TFT_CYAN);
+}
+
 void setup() {
   // M5Stack mit automatischer Konfiguration initialisieren
   auto cfg = M5.config();
@@ -43,6 +85,9 @@ void setup() {
   // Dekorative Linie am unteren Rand
   M5.Display.fillRect(0, 227, 320, 3, TFT_CYAN);
   M5.Display.fillRect(0, 230, 320, 10, TFT_NAVY);
+
+  // Weltkugel im Vordergrund zeichnen (oben links, überlappt Header und Text)
+  drawGlobe(60, 60, 45);
 }
 
 void loop() {
