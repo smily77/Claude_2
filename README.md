@@ -1,6 +1,7 @@
 # M5Stack Core2 - Hallo Welt
 
 Ein einfaches Arduino-Programm für den M5Stack Core2, das "Hallo Welt" auf dem Display anzeigt.
+Verwendet die M5Unified Bibliothek für maximale Kompatibilität mit allen M5Stack Geräten.
 
 ## Voraussetzungen
 
@@ -19,10 +20,11 @@ Ein einfaches Arduino-Programm für den M5Stack Core2, das "Hallo Welt" auf dem 
    - Gehe zu: `Werkzeuge` → `Board` → `Boardverwalter`
    - Suche nach "ESP32" und installiere "esp32 by Espressif Systems"
 
-3. **M5Core2 Bibliothek installieren**
+3. **M5Unified Bibliothek installieren**
    - Gehe zu: `Sketch` → `Bibliothek einbinden` → `Bibliotheken verwalten`
-   - Suche nach "M5Core2"
-   - Installiere "M5Core2 by M5Stack"
+   - Suche nach "M5Unified"
+   - Installiere "M5Unified by M5Stack"
+   - M5Unified ist die neueste Bibliothek, die alle M5Stack Geräte unterstützt
 
 ### Hardware
 
@@ -31,7 +33,8 @@ Ein einfaches Arduino-Programm für den M5Stack Core2, das "Hallo Welt" auf dem 
 
 ## Installation
 
-1. Öffne `M5Stack_Hello_World.ino` in der Arduino IDE
+1. Öffne den Ordner `M5_Hello_World` und öffne die Datei `M5_Hello_World.ino` in der Arduino IDE
+   - Wichtig: Die .ino-Datei muss in einem gleichnamigen Ordner liegen (Arduino IDE Anforderung)
 
 2. **Board-Einstellungen konfigurieren:**
    - `Werkzeuge` → `Board` → `ESP32 Arduino` → `M5Stack-Core2`
@@ -45,10 +48,11 @@ Ein einfaches Arduino-Programm für den M5Stack Core2, das "Hallo Welt" auf dem 
 
 ## Was macht das Programm?
 
-- Initialisiert den M5Stack Core2
+- Initialisiert den M5Stack Core2 mit M5Unified
 - Setzt den Hintergrund auf schwarz
 - Zeigt "Hallo Welt!" in weißer Schrift an
 - Zeigt "M5Stack Core2" in grüner Schrift an
+- Zeigt "mit M5Unified" in gelber Schrift an
 
 ## Fehlerbehebung
 
