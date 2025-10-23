@@ -12,8 +12,14 @@
 
 #include <M5Unified.h>
 
-// Funktion zum Zeichnen einer stilisierten Weltkugel
-void drawGlobe(int x, int y, int radius) {
+// Globale Variablen für Animation
+float rotationAngle = 0.0;
+const int globeX = 60;
+const int globeY = 55;  // 5 Pixel höher als vorher (war 60)
+const int globeRadius = 45;
+
+// Funktion zum Zeichnen einer stilisierten, rotierenden Weltkugel
+void drawGlobe(int x, int y, int radius, float angle) {
   // Schatten für 3D-Effekt
   M5.Display.fillCircle(x + 3, y + 3, radius, TFT_DARKGREY);
 
@@ -37,17 +43,32 @@ void drawGlobe(int x, int y, int radius) {
   M5.Display.drawEllipse(x, y, radius, radius/2, TFT_YELLOW);
   M5.Display.drawEllipse(x, y, radius-1, radius/2-1, TFT_YELLOW);
 
-  // Kontinente (vereinfacht als grüne Formen)
-  // Europa/Afrika
-  M5.Display.fillCircle(x - radius/4, y - radius/6, radius/5, TFT_GREEN);
-  M5.Display.fillCircle(x - radius/6, y + radius/4, radius/6, TFT_GREEN);
+  // Kontinente (vereinfacht als grüne Formen) - rotierend
+  // Berechne rotierte Positionen mit Trigonometrie
+  float rad = angle * PI / 180.0;
 
-  // Amerika
-  M5.Display.fillCircle(x + radius/3, y - radius/5, radius/7, TFT_DARKGREEN);
-  M5.Display.fillCircle(x + radius/2, y + radius/3, radius/8, TFT_DARKGREEN);
+  // Europa/Afrika (Position 0°)
+  int europeX1 = x + (int)((-radius/4) * cos(rad) - (-radius/6) * sin(rad));
+  int europeY1 = y + (int)((-radius/4) * sin(rad) + (-radius/6) * cos(rad));
+  int europeX2 = x + (int)((-radius/6) * cos(rad) - (radius/4) * sin(rad));
+  int europeY2 = y + (int)((-radius/6) * sin(rad) + (radius/4) * cos(rad));
+  M5.Display.fillCircle(europeX1, europeY1, radius/5, TFT_GREEN);
+  M5.Display.fillCircle(europeX2, europeY2, radius/6, TFT_GREEN);
 
-  // Asien
-  M5.Display.fillCircle(x - radius/2, y, radius/6, TFT_GREENYELLOW);
+  // Amerika (Position 90°)
+  float americaAngle = rad + PI/2;
+  int americaX1 = x + (int)((radius/3) * cos(americaAngle));
+  int americaY1 = y + (int)((radius/3) * sin(americaAngle) - radius/5);
+  int americaX2 = x + (int)((radius/2) * cos(americaAngle));
+  int americaY2 = y + (int)((radius/2) * sin(americaAngle) + radius/3);
+  M5.Display.fillCircle(americaX1, americaY1, radius/7, TFT_DARKGREEN);
+  M5.Display.fillCircle(americaX2, americaY2, radius/8, TFT_DARKGREEN);
+
+  // Asien (Position 180°)
+  float asiaAngle = rad + PI;
+  int asiaX = x + (int)((radius/2) * cos(asiaAngle));
+  int asiaY = y + (int)((radius/2) * sin(asiaAngle));
+  M5.Display.fillCircle(asiaX, asiaY, radius/6, TFT_GREENYELLOW);
 
   // Rand der Kugel
   M5.Display.drawCircle(x, y, radius, TFT_CYAN);
@@ -86,14 +107,30 @@ void setup() {
   M5.Display.fillRect(0, 227, 320, 3, TFT_CYAN);
   M5.Display.fillRect(0, 230, 320, 10, TFT_NAVY);
 
-  // Weltkugel im Vordergrund zeichnen (oben links, überlappt Header und Text)
-  drawGlobe(60, 60, 45);
+  // Erste Weltkugel im Vordergrund zeichnen
+  drawGlobe(globeX, globeY, globeRadius, rotationAngle);
 }
 
 void loop() {
   // M5Stack aktualisieren (für Touch und Buttons)
   M5.update();
 
-  // Hier könnte weiterer Code stehen
-  delay(100);
+  // Bereich der Weltkugel löschen (etwas größer für Schatten)
+  M5.Display.fillCircle(globeX + 3, globeY + 3, globeRadius + 2, TFT_NAVY);
+  M5.Display.fillCircle(globeX, globeY, globeRadius + 2, TFT_NAVY);
+
+  // Obere Cyan-Linie neu zeichnen (falls überzeichnet)
+  M5.Display.fillRect(0, 50, 320, 3, TFT_CYAN);
+
+  // Weltkugel mit neuer Rotation zeichnen
+  drawGlobe(globeX, globeY, globeRadius, rotationAngle);
+
+  // Rotationswinkel erhöhen (langsame Drehung)
+  rotationAngle += 2.0;
+  if (rotationAngle >= 360.0) {
+    rotationAngle = 0.0;
+  }
+
+  // Kurze Pause für flüssige Animation
+  delay(50);
 }
