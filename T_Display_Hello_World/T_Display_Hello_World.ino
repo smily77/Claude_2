@@ -49,33 +49,36 @@ void setup() {
   tft.setBrightness(255);    // Backlight auf Maximum (0-255)
   tft.fillScreen(COLOR_BG);
 
-  // Header-Bereich zeichnen
-  tft.fillRect(0, 0, 240, 30, COLOR_HEADER);
-  tft.drawLine(0, 30, 240, 30, COLOR_TEXT1);
+  // Gradient-Header (schöner als einfarbig)
+  for (int i = 0; i < 35; i++) {
+    uint16_t color = tft.color565(0, 0, 128 - i * 2);  // Blau-Gradient
+    tft.drawFastHLine(0, i, 240, color);
+  }
+  tft.drawFastHLine(0, 35, 240, COLOR_TEXT1);  // Cyan Trennlinie
 
-  // "Hallo Welt!" Haupttext
-  tft.setTextColor(COLOR_TEXT1, COLOR_BG);
-  tft.setTextSize(3);
-  tft.setCursor(20, 50);
-  tft.println("Hallo Welt!");
+  // "Hallo Welt!" - Großer fetter Titel
+  tft.setFont(&fonts::FreeSansBold18pt7b);  // Große fette Schrift
+  tft.setTextColor(COLOR_TEXT1);
+  tft.setTextDatum(top_center);              // Zentriert
+  tft.drawString("Hallo Welt!", 120, 45);
 
-  // Gerätename
-  tft.setTextColor(COLOR_TEXT2, COLOR_BG);
-  tft.setTextSize(2);
-  tft.setCursor(25, 85);
-  tft.println("LILYGO T-Display");
+  // Gerätename - Elegante Schrift
+  tft.setFont(&fonts::FreeSerif12pt7b);      // Serif = eleganter
+  tft.setTextColor(COLOR_TEXT2);
+  tft.setTextDatum(top_center);
+  tft.drawString("LILYGO T-Display", 120, 80);
 
-  // Info-Text
-  tft.setTextColor(COLOR_TEXT3, COLOR_BG);
-  tft.setTextSize(1);
-  tft.setCursor(45, 110);
-  tft.println("ESP32 mit ST7789");
+  // Info-Text - Kleinere Sans-Serif
+  tft.setFont(&fonts::FreeSans9pt7b);
+  tft.setTextColor(COLOR_TEXT3);
+  tft.setTextDatum(top_center);
+  tft.drawString("ESP32 mit ST7789", 120, 105);
 
-  // Anweisungen
-  tft.setTextColor(TFT_WHITE, COLOR_BG);
-  tft.setTextSize(1);
-  tft.setCursor(20, 125);
-  tft.println("Druecke Buttons zum Testen");
+  // Anweisungen - Noch kleiner
+  tft.setFont(&fonts::Font0);                // Kleine System-Schrift
+  tft.setTextColor(TFT_LIGHTGREY);
+  tft.setTextDatum(top_center);
+  tft.drawString("Buttons: Links/Rechts", 120, 123);
 
   Serial.println("Display bereit!");
 }
@@ -101,15 +104,19 @@ void loop() {
 }
 
 void updateCounter() {
-  // Counter-Bereich löschen
-  tft.fillRect(0, 0, 240, 30, COLOR_HEADER);
+  // Gradient-Header neu zeichnen
+  for (int i = 0; i < 35; i++) {
+    uint16_t color = tft.color565(0, 0, 128 - i * 2);  // Blau-Gradient
+    tft.drawFastHLine(0, i, 240, color);
+  }
 
-  // Counter anzeigen
-  tft.setTextColor(TFT_WHITE, COLOR_HEADER);
-  tft.setTextSize(2);
-  tft.setCursor(10, 8);
-  tft.print("Zaehler: ");
-  tft.print(counter);
+  // Counter mit schöner Schrift anzeigen
+  tft.setFont(&fonts::FreeSansBold12pt7b);
+  tft.setTextColor(TFT_WHITE);
+  tft.setTextDatum(middle_center);
+
+  String counterText = "Zaehler: " + String(counter);
+  tft.drawString(counterText, 120, 17);
 
   Serial.print("Counter: ");
   Serial.println(counter);
