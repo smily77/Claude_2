@@ -89,28 +89,35 @@ public:
   }
 
   // setRotation überschreiben, um Offsets für jede Rotation anzupassen
-  void setRotation(uint8_t rotation) override
+  void setRotation(uint8_t rotation)
   {
     // Offsets für verschiedene Rotationen
     // rotation 0 = Portrait, 1 = Landscape, 2 = Portrait 180°, 3 = Landscape 180°
-    switch (rotation & 0x03) {
+
+    rotation &= 0x03;
+    lgfx::LGFX_Device::setRotation(rotation); // Basis-Rotation setzen
+
+    // Dann Offsets anpassen
+    auto cfg = _panel_instance.config();
+    switch (rotation) {
       case 0: // Portrait
-        _panel_instance.setRotation(0);
-        _panel_instance.setOffset(52, 40);
+        cfg.offset_x = 52;
+        cfg.offset_y = 40;
         break;
       case 1: // Landscape (funktioniert mit diesen Werten)
-        _panel_instance.setRotation(1);
-        _panel_instance.setOffset(52, 40);
+        cfg.offset_x = 52;
+        cfg.offset_y = 40;
         break;
       case 2: // Portrait 180°
-        _panel_instance.setRotation(2);
-        _panel_instance.setOffset(52, 40);
+        cfg.offset_x = 52;
+        cfg.offset_y = 40;
         break;
       case 3: // Landscape 180° (invertierte Offsets)
-        _panel_instance.setRotation(3);
-        _panel_instance.setOffset(40, 52);
+        cfg.offset_x = 40;
+        cfg.offset_y = 52;
         break;
     }
+    _panel_instance.config(cfg);
   }
 };
 
