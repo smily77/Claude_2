@@ -5,29 +5,34 @@
  * Das T-Display hat ein 135x240 Pixel TFT-Display und 2 Buttons.
  *
  * Bibliotheken:
- * - TFT_eSPI (muss installiert und konfiguriert werden)
+ * - LovyanGFX (einfach über Bibliotheksverwalter installieren)
  *
  * Hardware:
  * - LILYGO T-Display (ESP32)
  * - Display: ST7789 135x240 Pixel
  * - 2 Buttons (GPIO 0 und GPIO 35)
+ *
+ * Vorteil LovyanGFX:
+ * - Keine Änderung von Library-Dateien nötig!
+ * - Alle Einstellungen in config.h im gleichen Ordner
+ * - Schneller und flexibler als TFT_eSPI
  */
 
-#include <TFT_eSPI.h>
+#include "config.h"
 
-// TFT Display Objekt erstellen
-TFT_eSPI tft = TFT_eSPI();
+// Display Objekt erstellen
+static LGFX tft;
 
 // Button Pins
 #define BUTTON_LEFT  0
 #define BUTTON_RIGHT 35
 
-// Farben
-#define COLOR_BG     0x0000  // Schwarz
-#define COLOR_HEADER 0x001F  // Blau
-#define COLOR_TEXT1  0x07FF  // Cyan
-#define COLOR_TEXT2  0xFFE0  // Gelb
-#define COLOR_TEXT3  0x07E0  // Grün
+// Farben (RGB565 Format)
+#define COLOR_BG     TFT_BLACK     // Schwarz
+#define COLOR_HEADER TFT_NAVY      // Dunkelblau
+#define COLOR_TEXT1  TFT_CYAN      // Cyan
+#define COLOR_TEXT2  TFT_YELLOW    // Gelb
+#define COLOR_TEXT3  TFT_GREEN     // Grün
 
 void setup() {
   // Serielle Kommunikation starten
@@ -40,7 +45,8 @@ void setup() {
 
   // Display initialisieren
   tft.init();
-  tft.setRotation(1);  // Landscape-Modus (240x135)
+  tft.setRotation(1);        // Landscape-Modus (240x135)
+  tft.setBrightness(255);    // Backlight auf Maximum (0-255)
   tft.fillScreen(COLOR_BG);
 
   // Header-Bereich zeichnen

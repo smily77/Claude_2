@@ -2,6 +2,8 @@
 
 Ein einfaches Hello World Programm für das LILYGO T-Display (ESP32 mit integriertem 135x240 Pixel TFT-Display).
 
+**Verwendet LovyanGFX** - Keine Änderung von Bibliotheks-Dateien nötig! Alle Einstellungen sind in `config.h` im Projektordner.
+
 ## Hardware
 
 - **LILYGO T-Display** (ESP32)
@@ -27,55 +29,15 @@ Ein einfaches Hello World Programm für das LILYGO T-Display (ESP32 mit integrie
 4. Gehe zu: `Werkzeuge` → `Board` → `Boardverwalter`
 5. Suche nach "ESP32" und installiere "esp32 by Espressif Systems"
 
-### 3. TFT_eSPI Bibliothek installieren
+### 3. LovyanGFX Bibliothek installieren
 
 1. Gehe zu: `Sketch` → `Bibliothek einbinden` → `Bibliotheken verwalten`
-2. Suche nach "TFT_eSPI"
-3. Installiere "TFT_eSPI by Bodmer"
+2. Suche nach "LovyanGFX"
+3. Installiere "LovyanGFX by lovyan03"
 
-### 4. TFT_eSPI für T-Display konfigurieren
+**Das war's!** Keine Konfigurationsdateien in der Bibliothek ändern - alle Einstellungen sind in der `config.h` im Projektordner!
 
-**WICHTIG:** Die TFT_eSPI Bibliothek muss für das T-Display konfiguriert werden!
-
-#### Option A: User_Setup.h bearbeiten (empfohlen)
-
-1. Finde den Speicherort der TFT_eSPI Bibliothek:
-   - **Windows**: `C:\Users\[Username]\Documents\Arduino\libraries\TFT_eSPI\`
-   - **Mac**: `~/Documents/Arduino/libraries/TFT_eSPI/`
-   - **Linux**: `~/Arduino/libraries/TFT_eSPI/`
-
-2. Öffne die Datei `User_Setup.h` in einem Texteditor
-
-3. Kommentiere alle aktiven Display-Treiber aus und aktiviere nur:
-   ```cpp
-   #define ST7789_DRIVER
-   ```
-
-4. Setze die Display-Größe:
-   ```cpp
-   #define TFT_WIDTH  135
-   #define TFT_HEIGHT 240
-   ```
-
-5. Konfiguriere die Pins (füge hinzu oder ändere):
-   ```cpp
-   #define TFT_MOSI 19
-   #define TFT_SCLK 18
-   #define TFT_CS   5
-   #define TFT_DC   16
-   #define TFT_RST  23
-   #define TFT_BL   4  // Backlight
-   ```
-
-#### Option B: Setup-Datei auswählen
-
-Einige TFT_eSPI Versionen haben vordefinierte Setups:
-
-1. Öffne `User_Setup_Select.h`
-2. Kommentiere die Standard-Zeile aus
-3. Suche und aktiviere: `#include <User_Setups/Setup25_TTGO_T_Display.h>`
-
-### 5. Board-Einstellungen in Arduino IDE
+### 4. Board-Einstellungen in Arduino IDE
 
 - **Board**: `Werkzeuge` → `Board` → `ESP32 Arduino` → `ESP32 Dev Module`
 - **Upload Speed**: `921600` (oder `115200` bei Problemen)
@@ -89,6 +51,7 @@ Einige TFT_eSPI Versionen haben vordefinierte Setups:
 
 1. Öffne die Datei `T_Display_Hello_World.ino` in der Arduino IDE
    - **Wichtig**: Die .ino-Datei muss im gleichnamigen Ordner `T_Display_Hello_World/` liegen
+   - Die `config.h` muss im gleichen Ordner sein (enthält Display-Konfiguration)
 
 2. Verbinde das T-Display über USB-C mit deinem Computer
 
@@ -97,6 +60,16 @@ Einige TFT_eSPI Versionen haben vordefinierte Setups:
 4. Klicke auf den Upload-Button (→)
 
 5. Warte bis "Hochladen abgeschlossen" erscheint
+
+## Projekt-Dateien
+
+```
+T_Display_Hello_World/
+├── T_Display_Hello_World.ino  # Hauptprogramm
+└── config.h                   # Display-Konfiguration (LovyanGFX)
+```
+
+Beide Dateien müssen im gleichen Ordner sein!
 
 ## Was macht das Programm?
 
@@ -126,12 +99,21 @@ Einige TFT_eSPI Versionen haben vordefinierte Setups:
 
 ## Fehlerbehebung
 
-### Display bleibt schwarz oder zeigt nur Müll
+### Display bleibt schwarz
 
-- **Problem**: TFT_eSPI ist nicht korrekt konfiguriert
-- **Lösung**: Überprüfe die `User_Setup.h` Konfiguration (siehe oben)
-- Stelle sicher, dass `ST7789_DRIVER` aktiviert ist
-- Überprüfe die Pin-Definitionen
+- **Problem**: Backlight nicht aktiviert oder falsche Pin-Konfiguration
+- **Lösung**:
+  - Überprüfe die `config.h` - Backlight Pin sollte 4 sein
+  - Stelle sicher, dass `tft.setBrightness(255);` im Code ist
+  - Versuche das Programm neu zu starten (Reset-Button)
+
+### Display zeigt Müll oder falsche Farben
+
+- **Problem**: Offset-Werte oder Konfiguration falsch
+- **Lösung**: Überprüfe in `config.h`:
+  - `cfg.offset_x = 52;`
+  - `cfg.offset_y = 40;`
+  - `cfg.invert = true;`
 
 ### Port wird nicht erkannt
 
@@ -199,10 +181,19 @@ I2C (falls vorhanden):
 - SCL:       GPIO 22
 ```
 
+## Vorteile von LovyanGFX
+
+- **Keine Library-Änderungen**: Alle Einstellungen im Projekt
+- **Schneller**: Optimierte Grafikausgabe
+- **Flexibler**: Einfache Anpassung verschiedener Displays
+- **Bessere API**: Mehr Funktionen als TFT_eSPI
+- **Hardware SPI**: Volle Geschwindigkeit
+
 ## Ressourcen
 
 - [LILYGO T-Display GitHub](https://github.com/Xinyuan-LilyGO/TTGO-T-Display)
-- [TFT_eSPI Bibliothek](https://github.com/Bodmer/TFT_eSPI)
+- [LovyanGFX Bibliothek](https://github.com/lovyan03/LovyanGFX)
+- [LovyanGFX Dokumentation](https://github.com/lovyan03/LovyanGFX/blob/master/doc/Panel_config.md)
 - [ESP32 Arduino Core](https://github.com/espressif/arduino-esp32)
 
 ## Lizenz
