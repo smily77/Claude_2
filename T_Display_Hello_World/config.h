@@ -54,9 +54,10 @@ public:
       cfg.panel_width = 135;
       cfg.panel_height = 240;
 
-      // T-Display 1.14" ist ein 240x240-ST7789 mit Fenster 135x240 -> Offsets:
-      cfg.offset_x = 52;
-      cfg.offset_y = 40;
+      // T-Display 1.14" ist ein 240x240-ST7789 mit Fenster 135x240
+      // Offsets werden in setRotation() gesetzt
+      cfg.offset_x = 0;
+      cfg.offset_y = 0;
 
       cfg.invert = true;    // ST7789 benötigt invertierte Farben
       cfg.rgb_order = false;
@@ -85,6 +86,31 @@ public:
     }
 
     setPanel(&_panel_instance);
+  }
+
+  // setRotation überschreiben, um Offsets für jede Rotation anzupassen
+  void setRotation(uint8_t rotation) override
+  {
+    // Offsets für verschiedene Rotationen
+    // rotation 0 = Portrait, 1 = Landscape, 2 = Portrait 180°, 3 = Landscape 180°
+    switch (rotation & 0x03) {
+      case 0: // Portrait
+        _panel_instance.setRotation(0);
+        _panel_instance.setOffset(52, 40);
+        break;
+      case 1: // Landscape (funktioniert mit diesen Werten)
+        _panel_instance.setRotation(1);
+        _panel_instance.setOffset(52, 40);
+        break;
+      case 2: // Portrait 180°
+        _panel_instance.setRotation(2);
+        _panel_instance.setOffset(52, 40);
+        break;
+      case 3: // Landscape 180° (invertierte Offsets)
+        _panel_instance.setRotation(3);
+        _panel_instance.setOffset(40, 52);
+        break;
+    }
   }
 };
 
