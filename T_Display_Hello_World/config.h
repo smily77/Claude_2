@@ -51,13 +51,13 @@ public:
       cfg.pin_busy = -1;  // nicht verwendet
 
       // Display Eigenschaften
-      cfg.memory_width = 135;
-      cfg.memory_height = 240;
-      cfg.panel_width = 135;
-      cfg.panel_height = 240;
-      cfg.offset_x = 52;  // wichtig für T-Display!
-      cfg.offset_y = 40;  // wichtig für T-Display!
-      cfg.offset_rotation = 2;
+      cfg.memory_width = 240;
+      cfg.memory_height = 135;
+      cfg.panel_width = 240;
+      cfg.panel_height = 135;
+      cfg.offset_x = 40;  // wichtig für T-Display!
+      cfg.offset_y = 52;  // wichtig für T-Display!
+      cfg.offset_rotation = 0;
 
       cfg.dummy_read_pixel = 8;
       cfg.dummy_read_bits = 1;
