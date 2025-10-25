@@ -45,7 +45,7 @@ void setup() {
 
   // Display initialisieren
   tft.init();
-  tft.setRotation(1);        // Landscape-Modus (240x135)
+  tft.setRotation(3);        // Landscape-Modus (240x135)
   tft.setBrightness(255);    // Backlight auf Maximum (0-255)
   tft.fillScreen(COLOR_BG);
 
