@@ -25,7 +25,7 @@ public:
       auto cfg = _bus_instance.config();
 
       cfg.spi_host = VSPI_HOST;  // VSPI_HOST oder HSPI_HOST
-      cfg.spi_mode = 0;
+      cfg.spi_mode = 3;          // ST7789: Mode 3 funktioniert zuverlässig
       cfg.freq_write = 40000000; // 40MHz
       cfg.freq_read = 16000000;  // 16MHz
       cfg.spi_3wire = true;
@@ -51,33 +51,34 @@ public:
       cfg.pin_busy = -1;  // nicht verwendet
 
       // Display Eigenschaften
-      cfg.memory_width = 135;
-      cfg.memory_height = 240;
       cfg.panel_width = 135;
       cfg.panel_height = 240;
-      cfg.offset_x = 40;  // Standard für T-Display (war 52, reduziert für Links-Verschiebung)
-      cfg.offset_y = 53;  // Standard für T-Display
-      cfg.offset_rotation = 0;
 
+      // T-Display 1.14" ist ein 240x240-ST7789 mit Fenster 135x240 -> Offsets:
+      cfg.offset_x = 52;
+      cfg.offset_y = 40;
+
+      cfg.invert = true;    // ST7789 benötigt invertierte Farben
+      cfg.rgb_order = false;
       cfg.dummy_read_pixel = 8;
       cfg.dummy_read_bits = 1;
       cfg.readable = false;
-      cfg.invert = true;  // Farben invertiert
-      cfg.rgb_order = false;
-      cfg.dlen_16bit = false;
-      cfg.bus_shared = false;
+      cfg.bus_shared = true;
+
+      // Memory-Scan Richtung (das Panel ist eigentlich 240x240)
+      cfg.memory_width = 240;
+      cfg.memory_height = 240;
 
       _panel_instance.config(cfg);
     }
 
     {
-      // Backlight Konfiguration
+      // Backlight Konfiguration (PWM)
       auto cfg = _light_instance.config();
 
-      cfg.pin_bl = 4;        // Backlight Pin
-      cfg.invert = false;
-      cfg.freq = 44100;
-      cfg.pwm_channel = 7;
+      cfg.pin_bl = 4;        // Backlight Pin beim T-Display
+      cfg.freq = 44100;      // PWM-Frequenz
+      cfg.pwm_channel = 7;   // nutze freien Kanal
 
       _light_instance.config(cfg);
       _panel_instance.setLight(&_light_instance);
