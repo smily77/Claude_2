@@ -16,8 +16,13 @@ Ein Arduino-Programm für das M5Stack Core Ink Development Kit, das Sie alle 2 T
 - M5Stack Core Ink Development Kit
 - 1.54" E-Ink Display (200x200 Pixel)
 - ESP32-PICO-D4
-- Integrierte RTC (Real Time Clock)
+- BM8563 RTC (Real Time Clock)
 - USB-C zum Programmieren und Laden
+
+**Kompatibilität:**
+- ✅ ESP32 Core 3.x (empfohlen)
+- ✅ M5GFX Bibliothek
+- ✅ Direkter I2C-Zugriff auf BM8563 RTC
 
 ## Voraussetzungen
 
@@ -36,10 +41,11 @@ Ein Arduino-Programm für das M5Stack Core Ink Development Kit, das Sie alle 2 T
    - Gehe zu: `Werkzeuge` → `Board` → `Boardverwalter`
    - Suche nach "ESP32" und installiere "esp32 by Espressif Systems"
 
-3. **M5CoreInk Bibliothek installieren**
+3. **M5GFX Bibliothek installieren**
    - Gehe zu: `Sketch` → `Bibliothek einbinden` → `Bibliotheken verwalten`
-   - Suche nach "M5CoreInk"
-   - Installiere "M5-CoreInk by M5Stack"
+   - Suche nach "M5GFX"
+   - Installiere "M5GFX by M5Stack"
+   - **WICHTIG**: Diese Version ist kompatibel mit ESP32 Core 3.x
 
 ## Installation
 
