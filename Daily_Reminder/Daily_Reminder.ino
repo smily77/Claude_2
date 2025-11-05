@@ -330,7 +330,7 @@ bool shouldShowYes() {
   // Test-Modus: Basierend auf aktueller Minute wechseln
   // Gerade Minuten (0, 2, 4, ...) = YES
   // Ungerade Minuten (1, 3, 5, ...) = NO
-  bool isEvenMinute = (rtcTime.Minutes % 2) == 0;
+  bool isEvenMinute = (rtcTime.Minutes % 4) == 0;
   Serial.printf("Test-Modus: Minute %d -> %s\n", rtcTime.Minutes, isEvenMinute ? "YES" : "NO");
   return isEvenMinute;
 #else
