@@ -271,18 +271,19 @@ void updateDisplay() {
   // Canvas löschen (weiß)
   canvas.fillSprite(TFT_WHITE);
   canvas.setTextColor(TFT_BLACK);
+  canvas.setTextDatum(middle_center); // Zentrierte Textausrichtung
 
-  // Uhrzeit - SEHR GROß oben anzeigen
+  // Datum - SEHR GROSS oben zentriert
   canvas.setFont(&fonts::Font6);
+  char dateStr[20];
+  sprintf(dateStr, "%02d.%02d.%02d", rtcDate.Date, rtcDate.Month, rtcDate.Year % 100); // Kurzformat: 05.11.25
+  canvas.drawString(dateStr, 100, 25); // X=100 ist Mitte, Y=25
+
+  // Uhrzeit - groß darunter zentriert
+  canvas.setFont(&fonts::Font4);
   char timeStr[10];
   sprintf(timeStr, "%02d:%02d", rtcTime.Hours, rtcTime.Minutes);
-  canvas.drawString(timeStr, 35, 5);
-
-  // Datum - groß anzeigen
-  canvas.setFont(&fonts::Font4);
-  char dateStr[20];
-  sprintf(dateStr, "%02d.%02d.%04d", rtcDate.Date, rtcDate.Month, rtcDate.Year);
-  canvas.drawString(dateStr, 15, 45);
+  canvas.drawString(timeStr, 100, 58); // X=100 ist Mitte, Y=58
 
   // Yes/No Icon anzeigen (basierend auf Tag oder Minute im Test-Modus)
   bool showYes = shouldShowYes();
@@ -293,25 +294,25 @@ void updateDisplay() {
 
   if (showYes) {
     canvas.drawBitmap(iconX, iconY, yes_icon_64x64, 64, 64, TFT_BLACK);
-    // "YES" Text unter dem Icon - sehr groß
+    // "YES" Text unter dem Icon - sehr groß und zentriert
     canvas.setFont(&fonts::Font6);
-    canvas.drawString("YES", 60, 145);
+    canvas.drawString("YES", 100, 148);
     Serial.println("Zeige YES Icon");
   } else {
     canvas.drawBitmap(iconX, iconY, no_icon_64x64, 64, 64, TFT_BLACK);
-    // "NO" Text unter dem Icon - sehr groß
+    // "NO" Text unter dem Icon - sehr groß und zentriert
     canvas.setFont(&fonts::Font6);
-    canvas.drawString("NO", 70, 145);
+    canvas.drawString("NO", 100, 148);
     Serial.println("Zeige NO Icon");
   }
 
-  // Batteriestand - GROSS anzeigen
+  // Batteriestand - GROSS unten zentriert
   float batteryVoltage = getBatteryVoltage();
   int batteryPercent = getBatteryPercent(batteryVoltage);
   char batteryStr[20];
   sprintf(batteryStr, "%d%% %.1fV", batteryPercent, batteryVoltage);
   canvas.setFont(&fonts::Font4);
-  canvas.drawString(batteryStr, 20, 175);
+  canvas.drawString(batteryStr, 100, 182); // X=100 ist Mitte, Y=182
 
   Serial.printf("Batteriestand: %d%% (%.2fV)\n", batteryPercent, batteryVoltage);
 
