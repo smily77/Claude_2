@@ -56,13 +56,20 @@ Ein Arduino-Programm für das M5Stack Core Ink Development Kit, das Sie alle 2 T
    ```
 
 2. **WiFi-Zugangsdaten konfigurieren**
-   - Öffne die Datei `Credentials.h`
-   - Ersetze die Platzhalter mit deinen echten WiFi-Zugangsdaten:
+   - Erstelle eine **globale** Datei `Credentials.h` in Ihrem Arduino-Bibliotheksordner
+   - Pfad: `Documents/Arduino/libraries/Credentials.h` (oder ähnlich auf Ihrem System)
+   - Füge folgende Zeilen ein:
      ```cpp
+     #ifndef CREDENTIALS_H
+     #define CREDENTIALS_H
+
      const char* ssid = "DeinWiFiName";
      const char* password = "DeinWiFiPasswort";
+
+     #endif
      ```
-   - **WICHTIG**: Diese Datei sollte NICHT in ein öffentliches Repository hochgeladen werden!
+   - **WICHTIG**: Diese Datei ist global und kann von allen Arduino-Projekten verwendet werden
+   - Sie wird NICHT ins Repository hochgeladen, da sie außerhalb des Projektordners liegt
 
 3. **Board-Einstellungen in Arduino IDE**
    - Öffne `Daily_Reminder.ino` in der Arduino IDE
@@ -111,8 +118,8 @@ Für schnelleres Testen ohne bis Mitternacht warten zu müssen:
 
 Im Test-Modus:
 - Das Display wird alle geraden Minuten aktualisiert (0, 2, 4, 6, 8, ...)
-- Dies ermöglicht schnelles Testen der Funktionalität
-- Das Yes/No Icon wechselt trotzdem nur jeden 2. Tag
+- Das Yes/No Icon wechselt **basierend auf der Minute**: Gerade Minuten = YES, ungerade Minuten = NO
+- Dies ermöglicht schnelles Testen der Funktionalität ohne Tage warten zu müssen
 
 **Für den Produktivbetrieb**: Kommentiere `#define Test` aus:
 ```cpp
@@ -142,10 +149,12 @@ Im Test-Modus:
 
 ## Dateien
 
-- `Daily_Reminder.ino` - Hauptprogramm
-- `Credentials.h` - WiFi-Zugangsdaten (muss angepasst werden!)
-- `icons.h` - Yes/No Icon-Bitmaps (64x64 Pixel)
+- `Daily_Reminder.ino` - Hauptprogramm mit RTC, WiFi und Deep Sleep
+- `icons.h` - Yes/No Icon-Bitmaps (64x64 Pixel, deutlich und gut lesbar)
 - `README.md` - Diese Datei
+
+**Externe Abhängigkeit:**
+- `Credentials.h` - WiFi-Zugangsdaten (global in Arduino/libraries/)
 
 ## Anpassungen
 

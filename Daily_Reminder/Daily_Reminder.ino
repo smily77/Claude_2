@@ -272,43 +272,50 @@ void updateDisplay() {
   canvas.fillSprite(TFT_WHITE);
   canvas.setTextColor(TFT_BLACK);
 
-  // Titel
-  canvas.setFont(&fonts::Font2);
-  canvas.drawString("Daily Reminder", 10, 10);
-  canvas.drawLine(10, 30, 190, 30, TFT_BLACK);
+  // Titel - größerer Font
+  canvas.setFont(&fonts::Font4);
+  canvas.setTextSize(1);
+  canvas.drawString("Reminder", 10, 5);
 
-  // Datum anzeigen
+  // Datum anzeigen - größerer Font
+  canvas.setFont(&fonts::Font2);
   char dateStr[20];
   sprintf(dateStr, "%02d.%02d.%04d", rtcDate.Date, rtcDate.Month, rtcDate.Year);
-  canvas.drawString(dateStr, 10, 40);
+  canvas.drawString(dateStr, 10, 35);
 
-  // Uhrzeit anzeigen
+  // Uhrzeit anzeigen - größerer Font
   char timeStr[10];
   sprintf(timeStr, "%02d:%02d", rtcTime.Hours, rtcTime.Minutes);
-  canvas.drawString(timeStr, 10, 58);
+  canvas.drawString(timeStr, 10, 55);
 
-  // Yes/No Icon anzeigen (basierend auf Tag)
+  // Yes/No Icon anzeigen (basierend auf Tag oder Minute im Test-Modus)
   bool showYes = shouldShowYes();
 
   // Icon zentriert anzeigen (64x64 Pixel Icon)
   int iconX = (200 - 64) / 2;
-  int iconY = 90;
+  int iconY = 85;
 
   if (showYes) {
     canvas.drawBitmap(iconX, iconY, yes_icon_64x64, 64, 64, TFT_BLACK);
+    // "YES" Text unter dem Icon - sehr groß
+    canvas.setFont(&fonts::Font6);
+    canvas.drawString("YES", 60, 155);
     Serial.println("Zeige YES Icon");
   } else {
     canvas.drawBitmap(iconX, iconY, no_icon_64x64, 64, 64, TFT_BLACK);
+    // "NO" Text unter dem Icon - sehr groß
+    canvas.setFont(&fonts::Font6);
+    canvas.drawString("NO", 70, 155);
     Serial.println("Zeige NO Icon");
   }
 
-  // Batteriestand anzeigen
+  // Batteriestand anzeigen - größerer Font
   float batteryVoltage = getBatteryVoltage();
   int batteryPercent = getBatteryPercent(batteryVoltage);
-  char batteryStr[30];
-  sprintf(batteryStr, "Akku: %d%% (%.2fV)", batteryPercent, batteryVoltage);
-  canvas.setFont(&fonts::Font0);
-  canvas.drawString(batteryStr, 10, 170);
+  char batteryStr[20];
+  sprintf(batteryStr, "%d%% %.1fV", batteryPercent, batteryVoltage);
+  canvas.setFont(&fonts::Font2);
+  canvas.drawString(batteryStr, 10, 180);
 
   Serial.printf("Batteriestand: %d%% (%.2fV)\n", batteryPercent, batteryVoltage);
 
@@ -319,6 +326,15 @@ void updateDisplay() {
 }
 
 bool shouldShowYes() {
+#ifdef Test
+  // Test-Modus: Basierend auf aktueller Minute wechseln
+  // Gerade Minuten (0, 2, 4, ...) = YES
+  // Ungerade Minuten (1, 3, 5, ...) = NO
+  bool isEvenMinute = (rtcTime.Minutes % 2) == 0;
+  Serial.printf("Test-Modus: Minute %d -> %s\n", rtcTime.Minutes, isEvenMinute ? "YES" : "NO");
+  return isEvenMinute;
+#else
+  // Produktiv-Modus: Basierend auf Tagen seit Start wechseln
   // Starttag aus Preferences lesen
   Preferences preferences;
   preferences.begin(PREF_NAMESPACE, true);
@@ -341,6 +357,7 @@ bool shouldShowYes() {
 
   // Jeden 2. Tag wechseln: Tag 0,2,4,6... = YES, Tag 1,3,5,7... = NO
   return (daysSinceStart % 2) == 0;
+#endif
 }
 
 int calculateDayOfYear(int year, int month, int day) {
@@ -366,12 +383,22 @@ bool isLeapYear(int year) {
 float getBatteryVoltage() {
   // M5CoreInk Batteriespannung auslesen
   // Der ADC-Pin für die Batterie ist GPIO35
+
+  // ADC für 0-3.6V Bereich konfigurieren
   analogSetAttenuation(ADC_11db);
-  int adcValue = analogRead(35);
+
+  // Mehrfache Messungen für Genauigkeit
+  int sum = 0;
+  for (int i = 0; i < 10; i++) {
+    sum += analogRead(35);
+    delay(10);
+  }
+  int adcValue = sum / 10;
 
   // Umrechnung: ADC-Wert zu Spannung
-  // M5CoreInk hat einen Spannungsteiler (2:1)
-  float voltage = (adcValue * 3.3 / 4095.0) * 2.0;
+  // M5CoreInk hat einen Spannungsteiler
+  // Empirisch ermittelt: Faktor 2.5 statt 2.0 für korrekte Messung
+  float voltage = (adcValue / 4095.0) * 3.3 * 2.5;
 
   return voltage;
 }
