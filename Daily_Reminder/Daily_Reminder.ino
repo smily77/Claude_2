@@ -272,50 +272,46 @@ void updateDisplay() {
   canvas.fillSprite(TFT_WHITE);
   canvas.setTextColor(TFT_BLACK);
 
-  // Titel - größerer Font
-  canvas.setFont(&fonts::Font4);
-  canvas.setTextSize(1);
-  canvas.drawString("Reminder", 10, 5);
-
-  // Datum anzeigen - größerer Font
-  canvas.setFont(&fonts::Font2);
-  char dateStr[20];
-  sprintf(dateStr, "%02d.%02d.%04d", rtcDate.Date, rtcDate.Month, rtcDate.Year);
-  canvas.drawString(dateStr, 10, 35);
-
-  // Uhrzeit anzeigen - größerer Font
+  // Uhrzeit - SEHR GROß oben anzeigen
+  canvas.setFont(&fonts::Font6);
   char timeStr[10];
   sprintf(timeStr, "%02d:%02d", rtcTime.Hours, rtcTime.Minutes);
-  canvas.drawString(timeStr, 10, 55);
+  canvas.drawString(timeStr, 35, 5);
+
+  // Datum - groß anzeigen
+  canvas.setFont(&fonts::Font4);
+  char dateStr[20];
+  sprintf(dateStr, "%02d.%02d.%04d", rtcDate.Date, rtcDate.Month, rtcDate.Year);
+  canvas.drawString(dateStr, 15, 45);
 
   // Yes/No Icon anzeigen (basierend auf Tag oder Minute im Test-Modus)
   bool showYes = shouldShowYes();
 
   // Icon zentriert anzeigen (64x64 Pixel Icon)
   int iconX = (200 - 64) / 2;
-  int iconY = 85;
+  int iconY = 75;
 
   if (showYes) {
     canvas.drawBitmap(iconX, iconY, yes_icon_64x64, 64, 64, TFT_BLACK);
     // "YES" Text unter dem Icon - sehr groß
     canvas.setFont(&fonts::Font6);
-    canvas.drawString("YES", 60, 155);
+    canvas.drawString("YES", 60, 145);
     Serial.println("Zeige YES Icon");
   } else {
     canvas.drawBitmap(iconX, iconY, no_icon_64x64, 64, 64, TFT_BLACK);
     // "NO" Text unter dem Icon - sehr groß
     canvas.setFont(&fonts::Font6);
-    canvas.drawString("NO", 70, 155);
+    canvas.drawString("NO", 70, 145);
     Serial.println("Zeige NO Icon");
   }
 
-  // Batteriestand anzeigen - größerer Font
+  // Batteriestand - GROSS anzeigen
   float batteryVoltage = getBatteryVoltage();
   int batteryPercent = getBatteryPercent(batteryVoltage);
   char batteryStr[20];
   sprintf(batteryStr, "%d%% %.1fV", batteryPercent, batteryVoltage);
-  canvas.setFont(&fonts::Font2);
-  canvas.drawString(batteryStr, 10, 180);
+  canvas.setFont(&fonts::Font4);
+  canvas.drawString(batteryStr, 20, 175);
 
   Serial.printf("Batteriestand: %d%% (%.2fV)\n", batteryPercent, batteryVoltage);
 
@@ -382,12 +378,12 @@ bool isLeapYear(int year) {
 
 float getBatteryVoltage() {
   // M5CoreInk Batteriespannung auslesen
-  // Der ADC-Pin für die Batterie ist GPIO35
+  // Hardware: GPIO35 mit Spannungsteiler (100k/100k = 1:1)
 
-  // ADC für 0-3.6V Bereich konfigurieren
+  // ADC für maximalen Bereich konfigurieren (0-3.6V)
   analogSetAttenuation(ADC_11db);
 
-  // Mehrfache Messungen für Genauigkeit
+  // Mehrfache Messungen für Genauigkeit (Mittelwert)
   int sum = 0;
   for (int i = 0; i < 10; i++) {
     sum += analogRead(35);
@@ -395,10 +391,18 @@ float getBatteryVoltage() {
   }
   int adcValue = sum / 10;
 
-  // Umrechnung: ADC-Wert zu Spannung
-  // M5CoreInk hat einen Spannungsteiler
-  // Empirisch ermittelt: Faktor 2.5 statt 2.0 für korrekte Messung
-  float voltage = (adcValue / 4095.0) * 3.3 * 2.5;
+  // Debug-Ausgabe für Fehlersuche
+  Serial.printf("ADC Raw: %d\n", adcValue);
+
+  // Umrechnung ADC zu Spannung
+  // M5CoreInk: 1:1 Spannungsteiler (100k/100k)
+  // ADC Referenz: 3.6V bei ADC_11db
+  // Tatsächliche Spannung = ADC-Spannung * 2 (wegen Teiler)
+  float voltage = (adcValue / 4095.0) * 3.6 * 2.0;
+
+  // Falls Spannung unter USB-Betrieb (wird oft über 5V USB versorgt)
+  // kann die Spannung höher sein - auf max 4.5V begrenzen
+  if (voltage > 4.5) voltage = 4.5;
 
   return voltage;
 }
