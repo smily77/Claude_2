@@ -17,6 +17,7 @@
 #include <M5CoreInk.h>
 #include <WiFi.h>
 #include <time.h>
+#include <Preferences.h>
 #include "Credentials.h"
 #include "icons.h"
 
@@ -139,12 +140,12 @@ void updateDisplay() {
   // Sprite für das gesamte Display erstellen
   if (InkPageSprite.creatSprite(0, 0, 200, 200, true)) {
 
-    // Hintergrund löschen
-    InkPageSprite.clear(INK_SPRITE_COLOR_WHITE);
+    // Hintergrund löschen (0 = weiß für E-Ink)
+    InkPageSprite.clear(0);
 
-    // Titel
+    // Titel (1 = schwarz für E-Ink)
     InkPageSprite.drawString(10, 10, "Daily Reminder", &AsciiFont8x16);
-    InkPageSprite.drawLine(10, 30, 190, 30, INK_SPRITE_COLOR_BLACK);
+    InkPageSprite.drawLine(10, 30, 190, 30, 1);
 
     // Datum anzeigen
     char dateStr[20];
@@ -164,10 +165,11 @@ void updateDisplay() {
     int iconY = 90;
 
     if (showYes) {
-      InkPageSprite.drawBitmap(iconX, iconY, 64, 64, yes_icon_64x64);
+      // drawBitmap: x, y, bitmap, width, height, color (1 = schwarz)
+      InkPageSprite.drawBitmap(iconX, iconY, yes_icon_64x64, 64, 64, 1);
       Serial.println("Zeige YES Icon");
     } else {
-      InkPageSprite.drawBitmap(iconX, iconY, 64, 64, no_icon_64x64);
+      InkPageSprite.drawBitmap(iconX, iconY, no_icon_64x64, 64, 64, 1);
       Serial.println("Zeige NO Icon");
     }
 
