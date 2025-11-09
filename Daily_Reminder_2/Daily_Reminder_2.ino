@@ -45,9 +45,6 @@ const int daylightOffset_sec = 3600;    // +1 Stunde für Sommerzeit
 M5GFX display;
 M5Canvas canvas(&display);
 
-// Power Management Pin
-#define POWER_HOLD_PIN 12
-
 // RTC Datenstrukturen
 struct RTCTime {
   uint8_t Hours;
@@ -84,16 +81,18 @@ void calculateAndEnterDeepSleep();
 void setup() {
   Serial.begin(115200);
   delay(100);
-  M5.begin();
+
+  // M5Unified initialisieren
+  auto cfg = M5.config();
+  // Für CoreInk ist external_rtc normalerweise schon korrekt gesetzt,
+  // wir lassen die Defaults so:
+  M5.begin(cfg);
+
   Serial.println("M5Stack Core Ink - Daily Reminder");
   Serial.println("==================================");
 
-  // Power Hold aktivieren
-  pinMode(POWER_HOLD_PIN, OUTPUT);
-  digitalWrite(POWER_HOLD_PIN, HIGH);
-
-  // I2C initialisieren
-  Wire.begin(21, 22); // SDA=21, SCL=22 für M5CoreInk
+  // I2C initialisieren (CoreInk: SDA=21, SCL=22)
+  Wire.begin(21, 22);
 
   // Display initialisieren
   initDisplay();
@@ -177,7 +176,7 @@ void setup() {
   // Display aktualisieren
   updateDisplay();
 
-  // Deep Sleep berechnen
+  // Deep Sleep berechnen und über M5.Power schlafen gehen
   calculateAndEnterDeepSleep();
 }
 
@@ -219,7 +218,7 @@ void getRTCTime(RTCTime* time) {
 
     time->Seconds = bcd2ToByte(sec & 0x7F);
     time->Minutes = bcd2ToByte(min & 0x7F);
-    time->Hours = bcd2ToByte(hour & 0x3F);
+    time->Hours   = bcd2ToByte(hour & 0x3F);
   }
 }
 
@@ -230,14 +229,14 @@ void getRTCDate(RTCDate* date) {
 
   Wire.requestFrom(BM8563_I2C_ADDR, 4);
   if (Wire.available() >= 4) {
-    uint8_t day = Wire.read();
+    uint8_t day   = Wire.read();
     Wire.read(); // Weekday - skip
     uint8_t month = Wire.read();
-    uint8_t year = Wire.read();
+    uint8_t year  = Wire.read();
 
-    date->Date = bcd2ToByte(day & 0x3F);
+    date->Date  = bcd2ToByte(day & 0x3F);
     date->Month = bcd2ToByte(month & 0x1F);
-    date->Year = bcd2ToByte(year) + 2000;
+    date->Year  = bcd2ToByte(year) + 2000;
   }
 }
 
@@ -326,8 +325,7 @@ void updateDisplay() {
 bool shouldShowYes() {
 #ifdef Test
   // Test-Modus: Basierend auf aktueller Minute wechseln
-  // Gerade Minuten (0, 2, 4, ...) = YES
-  // Ungerade Minuten (1, 3, 5, ...) = NO
+  // Hier: alle 4 Minuten YES (0,4,8,...) nur als Beispiel
   bool isEvenMinute = (rtcTime.Minutes % 4) == 0;
   Serial.printf("Test-Modus: Minute %d -> %s\n", rtcTime.Minutes, isEvenMinute ? "YES" : "NO");
   return isEvenMinute;
@@ -379,43 +377,22 @@ bool isLeapYear(int year) {
 }
 
 float getBatteryVoltage() {
-  // M5CoreInk Batteriespannung auslesen
-  // Hardware: GPIO35 mit Spannungsteiler (100k/100k = 1:1)
-
-  // ADC für maximalen Bereich konfigurieren (0-3.6V)
-  analogSetAttenuation(ADC_11db);
-
-  // Mehrfache Messungen für Genauigkeit (Mittelwert)
-  int sum = 0;
-  for (int i = 0; i < 10; i++) {
-    sum += analogRead(35);
-    delay(10);
-  }
-  int adcValue = sum / 10;
-
-  // Debug-Ausgabe für Fehlersuche
-  Serial.printf("ADC Raw: %d\n", adcValue);
-
-  // Umrechnung ADC zu Spannung
-  // M5CoreInk: 1:1 Spannungsteiler (100k/100k)
-  // ADC Referenz: 3.6V bei ADC_11db
-  // Tatsächliche Spannung = ADC-Spannung * 2 (wegen Teiler)
-  float voltage = (adcValue / 4095.0) * 3.6 * 2.0;
-
-  // Falls Spannung unter USB-Betrieb (wird oft über 5V USB versorgt)
-  // kann die Spannung höher sein - auf max 4.5V begrenzen
-  if (voltage > 4.5) voltage = 4.5;
-
-  return voltage;
+  // M5.Power.getBatteryVoltage() liefert mV (siehe CoreInk Battery Doku)
+  int mv = M5.Power.getBatteryVoltage();
+  return mv / 1000.0f;   // in Volt zurückgeben, z.B. 4.12
 }
 
 int getBatteryPercent(float voltage) {
-  // LiPo-Batterie: ~4.2V voll, ~3.3V leer
-  if (voltage >= 4.1) return 100;
-  if (voltage <= 3.3) return 0;
+  // bevorzugt den vom Board berechneten Prozentwert
+  int lvl = M5.Power.getBatteryLevel();  // 0..100, oder -1 wenn nicht unterstützt
+  if (lvl >= 0) {
+    return lvl;
+  }
 
-  // Linear interpolieren
-  int percent = (int)((voltage - 3.3) / (4.1 - 3.3) * 100.0);
+  // Fallback: eigene simple Umrechnung über Spannung
+  if (voltage >= 4.1f) return 100;
+  if (voltage <= 3.3f) return 0;
+  int percent = (int)((voltage - 3.3f) / (4.1f - 3.3f) * 100.0f);
   return constrain(percent, 0, 100);
 }
 
@@ -429,7 +406,7 @@ void calculateAndEnterDeepSleep() {
   int currentMinute = rtcTime.Minutes;
   int currentSecond = rtcTime.Seconds;
 
-  // Nächste gerade Minute finden
+  // Nächste „gerade“ Minute (hier im 2-Minuten-Raster)
   int nextEvenMinute = currentMinute;
   if (currentMinute % 2 != 0) {
     nextEvenMinute = currentMinute + 1;
@@ -437,39 +414,42 @@ void calculateAndEnterDeepSleep() {
     nextEvenMinute = currentMinute + 2;
   }
 
-  // Sekunden bis zur nächsten geraden Minute
   int minutesUntilWake = nextEvenMinute - currentMinute;
   if (minutesUntilWake <= 0) minutesUntilWake += 2;
 
   sleepSeconds = (minutesUntilWake * 60) - currentSecond;
 
-  Serial.printf("Aktuelle Minute: %d, Nächste gerade Minute: %d\n", currentMinute, nextEvenMinute);
+  Serial.printf("Aktuelle Minute: %d, Nächste Test-Minute: %d\n", currentMinute, nextEvenMinute);
   Serial.printf("Schlafe für %d Sekunden (%d Minuten)\n", sleepSeconds, sleepSeconds / 60);
 
 #else
   // Produktiv-Modus: Wecken um Mitternacht
   Serial.println("PRODUKTIV-MODUS aktiv");
 
-  int currentHour = rtcTime.Hours;
+  int currentHour   = rtcTime.Hours;
   int currentMinute = rtcTime.Minutes;
   int currentSecond = rtcTime.Seconds;
 
   // Sekunden bis Mitternacht berechnen
-  int secondsSinceMidnight = currentHour * 3600 + currentMinute * 60 + currentSecond;
-  int secondsUntilMidnight = 86400 - secondsSinceMidnight; // 86400 = 24 * 60 * 60
+  int secondsSinceMidnight  = currentHour * 3600 + currentMinute * 60 + currentSecond;
+  int secondsUntilMidnight  = 86400 - secondsSinceMidnight; // 86400 = 24 * 60 * 60
 
   sleepSeconds = secondsUntilMidnight;
 
   Serial.printf("Sekunden bis Mitternacht: %d (%d Stunden)\n", sleepSeconds, sleepSeconds / 3600);
 #endif
 
-  // In Deep Sleep gehen
-  Serial.printf("Gehe in Deep Sleep für %d Sekunden...\n", sleepSeconds);
+  Serial.printf("Gehe in Deep Sleep (timerSleep) für %d Sekunden...\n", sleepSeconds);
   Serial.println("==================================");
-  delay(100); // Kurze Verzögerung für Serial-Ausgabe
+  delay(200); // Kurze Verzögerung für Serial-Ausgabe
 
-  // Power Hold deaktivieren und Deep Sleep aktivieren
-  esp_sleep_enable_timer_wakeup(sleepSeconds * 1000000ULL); // Mikrosekunden
-  digitalWrite(POWER_HOLD_PIN, LOW);
-  esp_deep_sleep_start();
+  // Optional Display in Energiesparmodus schicken
+  // (bei E-Ink reicht im Prinzip das statische Bild)
+  //M5.Display.hibernate();
+
+  // WICHTIG: Jetzt NICHT den Power-Hold-Pin anfassen,
+  // sondern M5Unified das Power-Handling machen lassen.
+  M5.Power.timerSleep(sleepSeconds);
+
+  // kehrt nach Wakeup in setup() zurück
 }

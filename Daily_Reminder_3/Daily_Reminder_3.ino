@@ -7,13 +7,14 @@
  * Hardware: M5Stack Core Ink Development Kit (1.54'' E-Ink Display)
  *
  * Features:
- * - Zeitsynchronisation beim ersten Start (Zeitzone Zürich)
- * - Wechselndes Yes/No Icon jeden 2. Tag
+ * - Zeitsynchronisation:
+ *     - Erster Start: automatisch via Internet
+ *     - Später: manuell via Seitentaste beim Einschalten (kurz gedrückt halten)
+ * - Wechselndes Yes/No Icon jeden 2. Tag (oder Testmodus)
  * - Datums- und Batterieanzeige
  * - Deep Sleep zur Energieeinsparung
- * - Test-Modus für schnelleres Testen
  *
- * WICHTIG: Kompatibel mit ESP32 Core 3.x und M5GFX
+ * WICHTIG: ESP32 Core 3.x + M5Unified + M5GFX
  */
 
 #include <M5Unified.h>
@@ -22,11 +23,11 @@
 #include <time.h>
 #include <Preferences.h>
 #include <Wire.h>
-#include "Credentials.h"
-#include "icons.h"
+#include "Credentials.h"   // enthält ssid / password
+#include "icons.h"         // enthält yes_icon_64x64 / no_icon_64x64
 
-// Test-Modus: Definieren für Test (Umschalten jede gerade Minute)
-// Auskommentieren für Produktivbetrieb (Umschalten um Mitternacht)
+// Test-Modus: Definieren für Test (Umschalten alle 2 Minuten)
+// Auskommentieren für Produktivbetrieb (Umschalten um Mitternacht / alle 2 Tage)
 #define Test
 
 // Zeitzone Zürich (CET: UTC+1, CEST: UTC+2 mit Sommerzeit)
@@ -44,9 +45,6 @@ const int daylightOffset_sec = 3600;    // +1 Stunde für Sommerzeit
 // Display und Canvas
 M5GFX display;
 M5Canvas canvas(&display);
-
-// Power Management Pin
-#define POWER_HOLD_PIN 12
 
 // RTC Datenstrukturen
 struct RTCTime {
@@ -80,20 +78,21 @@ bool isLeapYear(int year);
 float getBatteryVoltage();
 int getBatteryPercent(float voltage);
 void calculateAndEnterDeepSleep();
+bool syncTimeFromInternet(bool setStartDay);
 
 void setup() {
   Serial.begin(115200);
   delay(100);
-  M5.begin();
+
+  // M5Unified initialisieren
+  auto cfg = M5.config();
+  M5.begin(cfg);
+
   Serial.println("M5Stack Core Ink - Daily Reminder");
   Serial.println("==================================");
 
-  // Power Hold aktivieren
-  pinMode(POWER_HOLD_PIN, OUTPUT);
-  digitalWrite(POWER_HOLD_PIN, HIGH);
-
-  // I2C initialisieren
-  Wire.begin(21, 22); // SDA=21, SCL=22 für M5CoreInk
+  // I2C initialisieren (CoreInk: SDA=21, SCL=22)
+  Wire.begin(21, 22);
 
   // Display initialisieren
   initDisplay();
@@ -101,73 +100,37 @@ void setup() {
   // RTC initialisieren
   initRTC();
 
-  // Prüfen, ob dies der erste Start ist
+  // Starttag aus Preferences lesen
   Preferences preferences;
   preferences.begin(PREF_NAMESPACE, false);
   int startDay = preferences.getInt(PREF_START_DAY, -1);
-
-  bool firstRun = (startDay == -1);
-
-  if (firstRun) {
-    Serial.println("Erster Start - Synchronisiere Zeit vom Internet...");
-
-    // WiFi verbinden
-    WiFi.begin(ssid, password);
-    Serial.print("Verbinde mit WiFi");
-
-    int wifiTimeout = 0;
-    while (WiFi.status() != WL_CONNECTED && wifiTimeout < 20) {
-      delay(500);
-      Serial.print(".");
-      wifiTimeout++;
-    }
-
-    if (WiFi.status() == WL_CONNECTED) {
-      Serial.println("\nWiFi verbunden!");
-      Serial.print("IP: ");
-      Serial.println(WiFi.localIP());
-
-      // Zeit vom NTP Server holen
-      configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-
-      // Warten bis Zeit synchronisiert ist
-      struct tm timeinfo;
-      if (getLocalTime(&timeinfo)) {
-        Serial.println("Zeit erfolgreich synchronisiert:");
-        Serial.println(&timeinfo, "%A, %d.%m.%Y %H:%M:%S");
-
-        // Zeit in RTC schreiben
-        rtcTime.Hours = timeinfo.tm_hour;
-        rtcTime.Minutes = timeinfo.tm_min;
-        rtcTime.Seconds = timeinfo.tm_sec;
-        setRTCTime(&rtcTime);
-
-        rtcDate.Year = timeinfo.tm_year + 1900;
-        rtcDate.Month = timeinfo.tm_mon + 1;
-        rtcDate.Date = timeinfo.tm_mday;
-        setRTCDate(&rtcDate);
-
-        // Starttag speichern (Tag des Jahres)
-        int dayOfYear = timeinfo.tm_yday;
-        preferences.putInt(PREF_START_DAY, dayOfYear);
-        Serial.printf("Starttag gespeichert: Tag %d des Jahres\n", dayOfYear);
-      } else {
-        Serial.println("Fehler beim Abrufen der Zeit!");
-      }
-
-      WiFi.disconnect(true);
-      WiFi.mode(WIFI_OFF);
-    } else {
-      Serial.println("\nWiFi-Verbindung fehlgeschlagen!");
-      Serial.println("Verwende Standardzeit...");
-    }
-  } else {
-    Serial.printf("Starttag aus Speicher: Tag %d des Jahres\n", startDay);
-  }
-
   preferences.end();
 
-  // Aktuelle Zeit von RTC lesen
+  bool needInitialSync = (startDay == -1);
+
+  // Seitenknopf beim Einschalten gedrückt halten => manueller Zeitsync
+  bool manualSync = false;
+  unsigned long t0 = millis();
+  while (millis() - t0 < 1500) {  // ~1,5 Sekunden Beobachtungsfenster
+    M5.update();
+    if (M5.BtnPWR.wasPressed() || M5.BtnPWR.isPressed()) {
+      manualSync = true;
+    }
+    delay(10);
+  }
+
+  if (needInitialSync) {
+    Serial.println("Erster Start / Starttag fehlt -> Internet-Zeitsync...");
+    syncTimeFromInternet(true);   // setzt Starttag in Preferences
+  } else {
+    Serial.printf("Starttag aus Speicher: Tag %d des Jahres\n", startDay);
+    if (manualSync) {
+      Serial.println("Manueller Zeitsync über Seitentaste angefordert...");
+      syncTimeFromInternet(false);  // Starttag bleibt erhalten
+    }
+  }
+
+  // Aktuelle Zeit von RTC lesen (nach evtl. Sync)
   getRTCTime(&rtcTime);
   getRTCDate(&rtcDate);
 
@@ -177,7 +140,7 @@ void setup() {
   // Display aktualisieren
   updateDisplay();
 
-  // Deep Sleep berechnen
+  // Deep Sleep berechnen und über M5.Power schlafen gehen
   calculateAndEnterDeepSleep();
 }
 
@@ -185,13 +148,17 @@ void loop() {
   // Wird nie erreicht, da wir in Deep Sleep gehen
 }
 
+// ----------------------------------------------------------
+// Display / RTC / Zeitfunktionen
+// ----------------------------------------------------------
+
 void initDisplay() {
   display.init();
   display.setRotation(0);
   display.setColorDepth(1); // 1-Bit für E-Ink
 
   canvas.setColorDepth(1);
-  canvas.createSprite(200, 200);
+  canvas.createSprite(200, 200);  // CoreInk: 200x200
   canvas.setTextDatum(top_left);
 
   Serial.println("Display initialisiert");
@@ -213,13 +180,13 @@ void getRTCTime(RTCTime* time) {
 
   Wire.requestFrom(BM8563_I2C_ADDR, 3);
   if (Wire.available() >= 3) {
-    uint8_t sec = Wire.read();
-    uint8_t min = Wire.read();
+    uint8_t sec  = Wire.read();
+    uint8_t min  = Wire.read();
     uint8_t hour = Wire.read();
 
     time->Seconds = bcd2ToByte(sec & 0x7F);
     time->Minutes = bcd2ToByte(min & 0x7F);
-    time->Hours = bcd2ToByte(hour & 0x3F);
+    time->Hours   = bcd2ToByte(hour & 0x3F);
   }
 }
 
@@ -230,14 +197,14 @@ void getRTCDate(RTCDate* date) {
 
   Wire.requestFrom(BM8563_I2C_ADDR, 4);
   if (Wire.available() >= 4) {
-    uint8_t day = Wire.read();
-    Wire.read(); // Weekday - skip
+    uint8_t day   = Wire.read();
+    Wire.read();          // Weekday - skip
     uint8_t month = Wire.read();
-    uint8_t year = Wire.read();
+    uint8_t year  = Wire.read();
 
-    date->Date = bcd2ToByte(day & 0x3F);
+    date->Date  = bcd2ToByte(day & 0x3F);
     date->Month = bcd2ToByte(month & 0x1F);
-    date->Year = bcd2ToByte(year) + 2000;
+    date->Year  = bcd2ToByte(year) + 2000;
   }
 }
 
@@ -267,6 +234,77 @@ uint8_t bcd2ToByte(uint8_t value) {
 uint8_t byteToBcd2(uint8_t value) {
   return ((value / 10) << 4) | (value % 10);
 }
+
+// ----------------------------------------------------------
+// Internet-Zeitsynchronisation
+// ----------------------------------------------------------
+
+bool syncTimeFromInternet(bool setStartDay) {
+  Serial.println("Starte Zeitsynchronisation via WiFi...");
+
+  WiFi.begin(ssid, password);
+  Serial.print("Verbinde mit WiFi");
+
+  int wifiTimeout = 0;
+  while (WiFi.status() != WL_CONNECTED && wifiTimeout < 20) {
+    delay(500);
+    Serial.print(".");
+    wifiTimeout++;
+  }
+
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("\nWiFi-Verbindung fehlgeschlagen!");
+    return false;
+  }
+
+  Serial.println("\nWiFi verbunden!");
+  Serial.print("IP: ");
+  Serial.println(WiFi.localIP());
+
+  // Zeit vom NTP-Server holen
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    Serial.println("Fehler beim Abrufen der Zeit!");
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    return false;
+  }
+
+  Serial.println("Zeit erfolgreich synchronisiert:");
+  Serial.println(&timeinfo, "%A, %d.%m.%Y %H:%M:%S");
+
+  // Zeit in RTC schreiben
+  rtcTime.Hours   = timeinfo.tm_hour;
+  rtcTime.Minutes = timeinfo.tm_min;
+  rtcTime.Seconds = timeinfo.tm_sec;
+  setRTCTime(&rtcTime);
+
+  rtcDate.Year  = timeinfo.tm_year + 1900;
+  rtcDate.Month = timeinfo.tm_mon + 1;
+  rtcDate.Date  = timeinfo.tm_mday;
+  setRTCDate(&rtcDate);
+
+  // Starttag nur beim allerersten Mal setzen
+  if (setStartDay) {
+    int dayOfYear = timeinfo.tm_yday;   // 0..365
+    Preferences preferences;
+    preferences.begin(PREF_NAMESPACE, false);
+    preferences.putInt(PREF_START_DAY, dayOfYear);
+    preferences.end();
+    Serial.printf("Starttag gespeichert: Tag %d des Jahres\n", dayOfYear);
+  }
+
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+
+  return true;
+}
+
+// ----------------------------------------------------------
+// Anzeige / Logik
+// ----------------------------------------------------------
 
 void updateDisplay() {
   // Canvas löschen (weiß)
@@ -326,9 +364,8 @@ void updateDisplay() {
 bool shouldShowYes() {
 #ifdef Test
   // Test-Modus: Basierend auf aktueller Minute wechseln
-  // Gerade Minuten (0, 2, 4, ...) = YES
-  // Ungerade Minuten (1, 3, 5, ...) = NO
-  bool isEvenMinute = (rtcTime.Minutes % 4) == 0;
+  // Gerade Minuten (0,2,4,...) = YES, ungerade = NO
+  bool isEvenMinute = (rtcTime.Minutes % 2) == 0;
   Serial.printf("Test-Modus: Minute %d -> %s\n", rtcTime.Minutes, isEvenMinute ? "YES" : "NO");
   return isEvenMinute;
 #else
@@ -378,46 +415,38 @@ bool isLeapYear(int year) {
   return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
 }
 
+// ----------------------------------------------------------
+// Batterie
+// ----------------------------------------------------------
+
 float getBatteryVoltage() {
-  // M5CoreInk Batteriespannung auslesen
-  // Hardware: GPIO35 mit Spannungsteiler (100k/100k = 1:1)
-
-  // ADC für maximalen Bereich konfigurieren (0-3.6V)
-  analogSetAttenuation(ADC_11db);
-
-  // Mehrfache Messungen für Genauigkeit (Mittelwert)
-  int sum = 0;
-  for (int i = 0; i < 10; i++) {
-    sum += analogRead(35);
-    delay(10);
-  }
-  int adcValue = sum / 10;
-
-  // Debug-Ausgabe für Fehlersuche
-  Serial.printf("ADC Raw: %d\n", adcValue);
-
-  // Umrechnung ADC zu Spannung
-  // M5CoreInk: 1:1 Spannungsteiler (100k/100k)
-  // ADC Referenz: 3.6V bei ADC_11db
-  // Tatsächliche Spannung = ADC-Spannung * 2 (wegen Teiler)
-  float voltage = (adcValue / 4095.0) * 3.6 * 2.0;
-
-  // Falls Spannung unter USB-Betrieb (wird oft über 5V USB versorgt)
-  // kann die Spannung höher sein - auf max 4.5V begrenzen
-  if (voltage > 4.5) voltage = 4.5;
-
-  return voltage;
+  // M5.Power.getBatteryVoltage() liefert mV
+  int mv = M5.Power.getBatteryVoltage();
+  float v = mv / 1000.0f;
+  Serial.printf("Battery raw: %d mV (%.2f V)\n", mv, v);
+  return v;
 }
 
 int getBatteryPercent(float voltage) {
-  // LiPo-Batterie: ~4.2V voll, ~3.3V leer
-  if (voltage >= 4.1) return 100;
-  if (voltage <= 3.3) return 0;
+  // Bevorzugt den vom Board berechneten Prozentwert
+  int lvl = M5.Power.getBatteryLevel();  // 0..100 oder -1
+  if (lvl >= 0) {
+    Serial.printf("Battery Level (Board): %d%%\n", lvl);
+    return lvl;
+  }
 
-  // Linear interpolieren
-  int percent = (int)((voltage - 3.3) / (4.1 - 3.3) * 100.0);
-  return constrain(percent, 0, 100);
+  // Fallback: einfache Spannungs-basierte Schätzung
+  if (voltage >= 4.1f) return 100;
+  if (voltage <= 3.3f) return 0;
+  int percent = (int)((voltage - 3.3f) / (4.1f - 3.3f) * 100.0f);
+  percent = constrain(percent, 0, 100);
+  Serial.printf("Battery Level (Fallback): %d%%\n", percent);
+  return percent;
 }
+
+// ----------------------------------------------------------
+// Sleep
+// ----------------------------------------------------------
 
 void calculateAndEnterDeepSleep() {
   int sleepSeconds;
@@ -437,7 +466,6 @@ void calculateAndEnterDeepSleep() {
     nextEvenMinute = currentMinute + 2;
   }
 
-  // Sekunden bis zur nächsten geraden Minute
   int minutesUntilWake = nextEvenMinute - currentMinute;
   if (minutesUntilWake <= 0) minutesUntilWake += 2;
 
@@ -450,11 +478,10 @@ void calculateAndEnterDeepSleep() {
   // Produktiv-Modus: Wecken um Mitternacht
   Serial.println("PRODUKTIV-MODUS aktiv");
 
-  int currentHour = rtcTime.Hours;
+  int currentHour   = rtcTime.Hours;
   int currentMinute = rtcTime.Minutes;
   int currentSecond = rtcTime.Seconds;
 
-  // Sekunden bis Mitternacht berechnen
   int secondsSinceMidnight = currentHour * 3600 + currentMinute * 60 + currentSecond;
   int secondsUntilMidnight = 86400 - secondsSinceMidnight; // 86400 = 24 * 60 * 60
 
@@ -463,13 +490,12 @@ void calculateAndEnterDeepSleep() {
   Serial.printf("Sekunden bis Mitternacht: %d (%d Stunden)\n", sleepSeconds, sleepSeconds / 3600);
 #endif
 
-  // In Deep Sleep gehen
-  Serial.printf("Gehe in Deep Sleep für %d Sekunden...\n", sleepSeconds);
+  Serial.printf("Gehe in Deep Sleep (timerSleep) für %d Sekunden...\n", sleepSeconds);
   Serial.println("==================================");
-  delay(100); // Kurze Verzögerung für Serial-Ausgabe
+  delay(200); // Kurze Verzögerung für Serial-Ausgabe
 
-  // Power Hold deaktivieren und Deep Sleep aktivieren
-  esp_sleep_enable_timer_wakeup(sleepSeconds * 1000000ULL); // Mikrosekunden
-  digitalWrite(POWER_HOLD_PIN, LOW);
-  esp_deep_sleep_start();
+  // M5Unified macht den Sleep inkl. Power-Hold/RTC-Wakeup
+  M5.Power.timerSleep(sleepSeconds);
+
+  // Nach Wakeup läuft wieder setup()
 }
