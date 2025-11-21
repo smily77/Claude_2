@@ -35,6 +35,11 @@ static LGFX tft;
 #define COLOR_BUTTON TFT_DARKGREY   // Dunkelgrau
 #define COLOR_TOUCH  TFT_RED        // Rot für Touch-Punkt
 
+// Eigene Farbdefinitionen (RGB565)
+#define TFT_DARKRED    0x8800       // Dunkelrot
+#define TFT_DARKGREEN  0x0320       // Dunkelgrün
+#define TFT_DARKBLUE   0x0010       // Dunkelblau
+
 // Button-Bereich definieren
 struct Button {
   int x, y, w, h;
