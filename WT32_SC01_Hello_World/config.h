@@ -32,18 +32,18 @@ public:
       // SPI Bus Konfiguration
       auto cfg = _bus_instance.config();
 
-      cfg.spi_host = HSPI_HOST;  // WT32-SC01 verwendet HSPI
+      cfg.spi_host = VSPI_HOST;  // WT32-SC01 verwendet VSPI
       cfg.spi_mode = 0;
       cfg.freq_write = 40000000; // 40MHz
       cfg.freq_read = 16000000;  // 16MHz
       cfg.spi_3wire = true;
       cfg.use_lock = true;
-      cfg.dma_channel = 1;
+      cfg.dma_channel = SPI_DMA_CH_AUTO;
 
       // WT32-SC01 SPI Pins
       cfg.pin_sclk = 14;
       cfg.pin_mosi = 13;
-      cfg.pin_miso = 12;
+      cfg.pin_miso = -1;         // Nicht verwendet
       cfg.pin_dc = 21;
 
       _bus_instance.config(cfg);
@@ -68,7 +68,7 @@ public:
       auto cfg = _panel_instance.config();
 
       cfg.pin_cs = 15;
-      cfg.pin_rst = -1;  // Kein Reset Pin
+      cfg.pin_rst = 22;  // Reset Pin
       cfg.pin_busy = -1;
 
       cfg.panel_width = 320;
