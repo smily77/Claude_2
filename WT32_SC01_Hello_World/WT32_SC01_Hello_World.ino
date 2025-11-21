@@ -66,7 +66,17 @@ void setup() {
   tft.init();
   tft.setRotation(1);        // Landscape-Modus (480x320)
   tft.setBrightness(255);    // Backlight auf Maximum (0-255)
+// Debug: Display Info ausgeben
+Serial.println("Display initialisiert");
+Serial.printf("Breite: %d, Hoehe: %d\n", tft.width(), tft.height());
 
+// Einfacher Test: Ganzer Screen rot
+tft.fillScreen(TFT_RED);
+delay(1000);
+tft.fillScreen(TFT_GREEN);
+delay(1000);
+tft.fillScreen(TFT_BLUE);
+delay(1000);
   // Ersten Screen zeichnen
   drawMainScreen();
 
