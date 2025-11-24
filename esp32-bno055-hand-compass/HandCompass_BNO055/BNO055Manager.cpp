@@ -7,6 +7,10 @@
 #include "BNO055Manager.h"
 #include "CompassUI.h"
 
+// Sensor mounting orientation
+#define SENSOR_UPSIDE_DOWN true  // Set to true if sensor is mounted upside down
+#define SENSOR_OFFSET_DEGREES 189.0f  // Additional offset to correct for mounting angle (0-360)
+
 // Calibration stability time (milliseconds)
 #define CALIB_STABLE_TIME 3000
 
@@ -280,7 +284,22 @@ void BNO055Manager::updateCalibrationState() {
       break;
 
     case STATE_NORMAL:
-      // Nothing special to do
+      // Even in normal mode, save calibration if achieved and not yet saved
+      if (fullyCalibrated && !calibrationLoaded) {
+        if (!wasFullyCalibrated) {
+          wasFullyCalibrated = true;
+          fullyCalibStartTime = millis();
+          Serial.println("Fully calibrated in normal mode - waiting for stability...");
+        } else {
+          if (millis() - fullyCalibStartTime >= CALIB_STABLE_TIME) {
+            saveCalibrationToNVS();
+            calibrationLoaded = true;
+            Serial.println("Calibration saved in normal mode!");
+          }
+        }
+      } else if (!fullyCalibrated) {
+        wasFullyCalibrated = false;
+      }
       break;
   }
 }
@@ -345,7 +364,22 @@ void BNO055Manager::updateFilteredHeading(float rawHeading) {
  * Get filtered heading
  */
 float BNO055Manager::getFilteredHeadingDegrees() {
-  return filteredHeading;
+  float heading = filteredHeading;
+
+  // Correct for upside-down sensor mounting
+  #if SENSOR_UPSIDE_DOWN
+    // Invert rotation direction (mirror) and add 180° offset
+    heading = 180.0f - heading;
+  #endif
+
+  // Apply mounting offset (for slightly angled sensor)
+  heading += SENSOR_OFFSET_DEGREES;
+
+  // Normalize to 0-360
+  while (heading < 0.0f) heading += 360.0f;
+  while (heading >= 360.0f) heading -= 360.0f;
+
+  return heading;
 }
 
 /**
@@ -391,12 +425,17 @@ void BNO055Manager::requestManualCalibration() {
 }
 
 /**
- * Exit manual calibration
+ * Exit manual calibration (also cancels auto-calibration)
  */
 void BNO055Manager::exitManualCalibration() {
-  if (state == STATE_MANUAL_CALIBRATING) {
+  if (state == STATE_MANUAL_CALIBRATING || state == STATE_AUTO_CALIBRATING) {
+    CalibrationState oldState = state;
     state = STATE_NORMAL;
-    Serial.println("Manual calibration cancelled");
+    if (oldState == STATE_AUTO_CALIBRATING) {
+      Serial.println("Auto-calibration cancelled - continuing without calibration");
+    } else {
+      Serial.println("Manual calibration cancelled");
+    }
   }
 }
 
