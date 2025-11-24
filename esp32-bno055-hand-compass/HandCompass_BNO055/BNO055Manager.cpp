@@ -9,6 +9,7 @@
 
 // Sensor mounting orientation
 #define SENSOR_UPSIDE_DOWN true  // Set to true if sensor is mounted upside down
+#define SENSOR_OFFSET_DEGREES 189.0f  // Additional offset to correct for mounting angle (0-360)
 
 // Calibration stability time (milliseconds)
 #define CALIB_STABLE_TIME 3000
@@ -369,9 +370,14 @@ float BNO055Manager::getFilteredHeadingDegrees() {
   #if SENSOR_UPSIDE_DOWN
     // Invert rotation direction (mirror) and add 180° offset
     heading = 180.0f - heading;
-    if (heading < 0.0f) heading += 360.0f;
-    if (heading >= 360.0f) heading -= 360.0f;
   #endif
+
+  // Apply mounting offset (for slightly angled sensor)
+  heading += SENSOR_OFFSET_DEGREES;
+
+  // Normalize to 0-360
+  while (heading < 0.0f) heading += 360.0f;
+  while (heading >= 360.0f) heading -= 360.0f;
 
   return heading;
 }
