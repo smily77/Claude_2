@@ -108,8 +108,9 @@ void CompassUI::loop() {
     display->fillCircle(centerX, centerY, COMPASS_RADIUS + 5, COLOR_BACKGROUND);
     drawCompassRose();
     drawNeedle(currentHeading);
-    // Clear and update digital display (top right corner) - wider area for text_right alignment
-    display->fillRect(screenWidth - DISPLAY_X_OFFSET - 20, DISPLAY_Y - 2, DISPLAY_X_OFFSET + 10, 50, COLOR_BACKGROUND);
+    // Clear digital display area (top right) - must cover all text with right alignment
+    // Text is right-aligned at screenWidth - DISPLAY_X_OFFSET, so clear wider to the left
+    display->fillRect(screenWidth - DISPLAY_X_OFFSET - 65, DISPLAY_Y - 2, 70, 50, COLOR_BACKGROUND);
     drawDigitalDisplay();
     lastDrawnHeading = currentHeading;
   }
