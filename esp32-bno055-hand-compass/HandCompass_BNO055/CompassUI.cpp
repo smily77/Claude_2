@@ -8,9 +8,9 @@
 #include "BNO055Manager.h"
 #include <math.h>
 
-// Compass dimensions
-#define COMPASS_RADIUS 100
-#define NEEDLE_LENGTH 80
+// Compass dimensions - smaller to avoid overlaps
+#define COMPASS_RADIUS 70
+#define NEEDLE_LENGTH 60
 #define CARDINAL_OFFSET 15
 
 // Button dimensions
@@ -18,6 +18,10 @@
 #define BUTTON_Y 10
 #define BUTTON_W 100
 #define BUTTON_H 40
+
+// Digital display position - top right to avoid button
+#define DISPLAY_X_OFFSET 60  // From right edge
+#define DISPLAY_Y 15
 
 /**
  * Constructor
@@ -100,12 +104,12 @@ void CompassUI::loop() {
 
   // Partial updates only when needed - no flicker!
   if (headingChanged) {
-    // Clear and redraw compass area only
+    // Clear and redraw compass area only (smaller circle now)
     display->fillCircle(centerX, centerY, COMPASS_RADIUS + 5, COLOR_BACKGROUND);
     drawCompassRose();
     drawNeedle(currentHeading);
-    // Also update digital display (heading number)
-    display->fillRect(centerX - 80, 15, 160, 50, COLOR_BACKGROUND);
+    // Clear and update digital display (top right corner)
+    display->fillRect(screenWidth - DISPLAY_X_OFFSET - 10, DISPLAY_Y, DISPLAY_X_OFFSET + 5, 50, COLOR_BACKGROUND);
     drawDigitalDisplay();
     lastDrawnHeading = currentHeading;
   }
@@ -262,21 +266,22 @@ void CompassUI::drawNeedle(float heading) {
  * Draw digital heading display
  */
 void CompassUI::drawDigitalDisplay() {
-  // Position at top of screen
-  int16_t y = 20;
+  // Position at top right corner to avoid button (top left)
+  int16_t x = screenWidth - DISPLAY_X_OFFSET;
+  int16_t y = DISPLAY_Y;
 
   display->setTextColor(COLOR_TEXT);
-  display->setTextDatum(top_center);
+  display->setTextDatum(top_right);
 
-  // Large heading number
-  display->setFont(&fonts::FreeSansBold18pt7b);
+  // Heading number - smaller font, no degree symbol
+  display->setFont(&fonts::FreeSansBold12pt7b);
   char headingStr[16];
-  sprintf(headingStr, "%.1f°", currentHeading);
-  display->drawString(headingStr, centerX, y);
+  sprintf(headingStr, "%.1f", currentHeading);
+  display->drawString(headingStr, x, y);
 
   // Direction text below
-  display->setFont(&fonts::FreeSansBold12pt7b);
-  display->drawString(currentDirection, centerX, y + 35);
+  display->setFont(&fonts::FreeSansBold9pt7b);
+  display->drawString(currentDirection, x, y + 22);
 }
 
 /**
