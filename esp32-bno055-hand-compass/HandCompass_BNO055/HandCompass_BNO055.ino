@@ -26,7 +26,7 @@
  * Date: 2025
  */
 
-#include "CYD_Display_Config.h"
+
 #include "CompassUI.h"
 #include "BNO055Manager.h"
 

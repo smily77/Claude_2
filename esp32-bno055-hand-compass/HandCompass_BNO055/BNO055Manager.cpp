@@ -27,7 +27,7 @@
  * Constructor
  */
 BNO055Manager::BNO055Manager()
-  : bno(55, 0x28, &Wire),
+  : bno(55, 0x29, &Wire),
     ui(nullptr),
     state(STATE_NORMAL),
     calibrationLoaded(false),
