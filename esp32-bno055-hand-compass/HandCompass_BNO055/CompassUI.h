@@ -102,14 +102,20 @@ private:
   // Current state
   float currentHeading;
   const char* currentDirection;
+  float lastDrawnHeading;  // Track last drawn heading
   uint8_t calSys, calGyro, calAccel, calMag;
+  uint8_t lastCalSys, lastCalGyro, lastCalAccel, lastCalMag;
   bool showWarning;
+  bool lastShowWarning;
   bool inCalibrationMode;
+  bool lastInCalibrationMode;
   bool autoCalibrationMode;
+  bool needsFullRedraw;
 
   // Touch state
   bool lastTouchState;
   bool buttonPressed;
+  bool lastButtonPressed;
 
   // Rendering
   void drawCompassRose();

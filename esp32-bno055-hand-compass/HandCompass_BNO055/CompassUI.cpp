@@ -8,9 +8,9 @@
 #include "BNO055Manager.h"
 #include <math.h>
 
-// Compass dimensions
-#define COMPASS_RADIUS 100
-#define NEEDLE_LENGTH 80
+// Compass dimensions - smaller to avoid overlaps
+#define COMPASS_RADIUS 70
+#define NEEDLE_LENGTH 60
 #define CARDINAL_OFFSET 15
 
 // Button dimensions
@@ -18,6 +18,10 @@
 #define BUTTON_Y 10
 #define BUTTON_W 100
 #define BUTTON_H 40
+
+// Digital display position - top right to avoid button
+#define DISPLAY_X_OFFSET 60  // From right edge
+#define DISPLAY_Y 15
 
 /**
  * Constructor
@@ -31,12 +35,18 @@ CompassUI::CompassUI()
     centerY(0),
     currentHeading(0.0f),
     currentDirection("N"),
+    lastDrawnHeading(-999.0f),
     calSys(0), calGyro(0), calAccel(0), calMag(0),
+    lastCalSys(255), lastCalGyro(255), lastCalAccel(255), lastCalMag(255),
     showWarning(false),
+    lastShowWarning(false),
     inCalibrationMode(false),
+    lastInCalibrationMode(false),
     autoCalibrationMode(false),
+    needsFullRedraw(true),
     lastTouchState(false),
-    buttonPressed(false) {
+    buttonPressed(false),
+    lastButtonPressed(false) {
 }
 
 /**
@@ -61,18 +71,63 @@ void CompassUI::begin(LGFX* lcd) {
 void CompassUI::loop() {
   handleTouch();
 
-  // Full redraw (for simplicity - can be optimized later)
-  display->fillScreen(COLOR_BACKGROUND);
+  // Check what changed
+  bool headingChanged = abs(currentHeading - lastDrawnHeading) > 0.5f;
+  bool calChanged = (calSys != lastCalSys || calGyro != lastCalGyro ||
+                     calAccel != lastCalAccel || calMag != lastCalMag);
+  bool warningChanged = (showWarning != lastShowWarning);
+  bool modeChanged = (inCalibrationMode != lastInCalibrationMode);
+  bool buttonChanged = (buttonPressed != lastButtonPressed);
 
-  if (inCalibrationMode) {
-    drawCalibrationInstructions();
+  // Full redraw only when necessary (first run or mode change)
+  if (needsFullRedraw || modeChanged) {
+    display->fillScreen(COLOR_BACKGROUND);
+    drawCompassRose();
+    drawNeedle(currentHeading);
+    drawDigitalDisplay();
+    drawCalibrationPanel();
+    drawCalibrateButton();
+
+    if (inCalibrationMode) {
+      drawCalibrationInstructions();
+    }
+
+    needsFullRedraw = false;
+    lastDrawnHeading = currentHeading;
+    lastCalSys = calSys; lastCalGyro = calGyro;
+    lastCalAccel = calAccel; lastCalMag = calMag;
+    lastShowWarning = showWarning;
+    lastInCalibrationMode = inCalibrationMode;
+    lastButtonPressed = buttonPressed;
+    return;
   }
 
-  drawCompassRose();
-  drawNeedle(currentHeading);
-  drawDigitalDisplay();
-  drawCalibrationPanel();
-  drawCalibrateButton();
+  // Partial updates only when needed - no flicker!
+  if (headingChanged) {
+    // Clear and redraw compass area only (smaller circle now)
+    display->fillCircle(centerX, centerY, COMPASS_RADIUS + 5, COLOR_BACKGROUND);
+    drawCompassRose();
+    drawNeedle(currentHeading);
+    // Clear and update digital display (top right corner)
+    display->fillRect(screenWidth - DISPLAY_X_OFFSET - 10, DISPLAY_Y, DISPLAY_X_OFFSET + 5, 50, COLOR_BACKGROUND);
+    drawDigitalDisplay();
+    lastDrawnHeading = currentHeading;
+  }
+
+  if (calChanged || warningChanged) {
+    // Clear and redraw calibration panel only
+    display->fillRect(0, screenHeight - 65, screenWidth, 65, COLOR_BACKGROUND);
+    drawCalibrationPanel();
+    lastCalSys = calSys; lastCalGyro = calGyro;
+    lastCalAccel = calAccel; lastCalMag = calMag;
+    lastShowWarning = showWarning;
+  }
+
+  if (buttonChanged) {
+    // Redraw button only
+    drawCalibrateButton();
+    lastButtonPressed = buttonPressed;
+  }
 }
 
 /**
@@ -211,21 +266,22 @@ void CompassUI::drawNeedle(float heading) {
  * Draw digital heading display
  */
 void CompassUI::drawDigitalDisplay() {
-  // Position at top of screen
-  int16_t y = 20;
+  // Position at top right corner to avoid button (top left)
+  int16_t x = screenWidth - DISPLAY_X_OFFSET;
+  int16_t y = DISPLAY_Y;
 
   display->setTextColor(COLOR_TEXT);
-  display->setTextDatum(top_center);
+  display->setTextDatum(top_right);
 
-  // Large heading number
-  display->setFont(&fonts::FreeSansBold18pt7b);
+  // Heading number - smaller font, no degree symbol
+  display->setFont(&fonts::FreeSansBold12pt7b);
   char headingStr[16];
-  sprintf(headingStr, "%.1f°", currentHeading);
-  display->drawString(headingStr, centerX, y);
+  sprintf(headingStr, "%.1f", currentHeading);
+  display->drawString(headingStr, x, y);
 
   // Direction text below
-  display->setFont(&fonts::FreeSansBold12pt7b);
-  display->drawString(currentDirection, centerX, y + 35);
+  display->setFont(&fonts::FreeSansBold9pt7b);
+  display->drawString(currentDirection, x, y + 22);
 }
 
 /**
@@ -320,28 +376,36 @@ void CompassUI::handleTouch() {
   uint16_t x, y;
   bool touching = display->getTouch(&x, &y);
 
-  // Detect button press (on release)
+  // Check if currently touching button area
+  bool touchingButton = false;
+  if (touching) {
+    touchingButton = (x >= BUTTON_X && x <= BUTTON_X + BUTTON_W &&
+                      y >= BUTTON_Y && y <= BUTTON_Y + BUTTON_H);
+  }
+
+  // Detect button press on release (standard button behavior)
   if (lastTouchState && !touching) {
-    // Touch released
+    // Touch was released
     if (buttonPressed) {
-      // Button was pressed and now released - trigger action
+      // Button was pressed and now released - trigger action!
+      Serial.println("Button clicked!");
       if (manager) {
         if (inCalibrationMode) {
+          Serial.println("Exiting calibration...");
           manager->exitManualCalibration();
         } else {
+          Serial.println("Starting calibration...");
           manager->requestManualCalibration();
         }
       }
-      buttonPressed = false;
     }
+    buttonPressed = false;
   } else if (touching) {
-    // Check if touching button area
-    if (x >= BUTTON_X && x <= BUTTON_X + BUTTON_W &&
-        y >= BUTTON_Y && y <= BUTTON_Y + BUTTON_H) {
-      buttonPressed = true;
-    } else {
-      buttonPressed = false;
-    }
+    // Update button state based on current touch position
+    buttonPressed = touchingButton;
+  } else {
+    // Not touching
+    buttonPressed = false;
   }
 
   lastTouchState = touching;
