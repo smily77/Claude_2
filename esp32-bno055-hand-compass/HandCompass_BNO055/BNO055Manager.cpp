@@ -391,12 +391,17 @@ void BNO055Manager::requestManualCalibration() {
 }
 
 /**
- * Exit manual calibration
+ * Exit manual calibration (also cancels auto-calibration)
  */
 void BNO055Manager::exitManualCalibration() {
-  if (state == STATE_MANUAL_CALIBRATING) {
+  if (state == STATE_MANUAL_CALIBRATING || state == STATE_AUTO_CALIBRATING) {
+    CalibrationState oldState = state;
     state = STATE_NORMAL;
-    Serial.println("Manual calibration cancelled");
+    if (oldState == STATE_AUTO_CALIBRATING) {
+      Serial.println("Auto-calibration cancelled - continuing without calibration");
+    } else {
+      Serial.println("Manual calibration cancelled");
+    }
   }
 }
 

@@ -108,8 +108,8 @@ void CompassUI::loop() {
     display->fillCircle(centerX, centerY, COMPASS_RADIUS + 5, COLOR_BACKGROUND);
     drawCompassRose();
     drawNeedle(currentHeading);
-    // Clear and update digital display (top right corner)
-    display->fillRect(screenWidth - DISPLAY_X_OFFSET - 10, DISPLAY_Y, DISPLAY_X_OFFSET + 5, 50, COLOR_BACKGROUND);
+    // Clear and update digital display (top right corner) - wider area for text_right alignment
+    display->fillRect(screenWidth - DISPLAY_X_OFFSET - 20, DISPLAY_Y - 2, DISPLAY_X_OFFSET + 10, 50, COLOR_BACKGROUND);
     drawDigitalDisplay();
     lastDrawnHeading = currentHeading;
   }
@@ -327,25 +327,25 @@ void CompassUI::drawCalibrationPanel() {
  * Draw calibration instructions
  */
 void CompassUI::drawCalibrationInstructions() {
-  int16_t y = screenHeight - 120;
+  // Position below compass rose, above calibration panel
+  // Compass center is at centerY, radius is 70, so bottom is at centerY + 70 + 15 = centerY + 85
+  int16_t y = centerY + 90;  // Start below compass rose
 
   display->setFont(&fonts::FreeSans9pt7b);
   display->setTextColor(COLOR_WARNING);
   display->setTextDatum(top_center);
 
   if (autoCalibrationMode) {
-    display->drawString("AUTO-CALIBRATION", centerX, y);
+    display->drawString("AUTO-CALIB", centerX, y);
   } else {
-    display->drawString("MANUAL CALIBRATION", centerX, y);
+    display->drawString("MANUAL CALIB", centerX, y);
   }
 
   display->setTextColor(COLOR_TEXT);
   display->setFont(&fonts::FreeSans9pt7b);
-  y += 20;
+  y += 18;
 
-  display->drawString("Move device in", centerX, y);
-  y += 15;
-  display->drawString("figure-8 pattern", centerX, y);
+  display->drawString("Move in figure-8", centerX, y);
   y += 15;
   display->drawString("for all axes", centerX, y);
 }
