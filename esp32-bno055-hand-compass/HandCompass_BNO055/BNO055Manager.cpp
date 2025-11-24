@@ -367,7 +367,9 @@ float BNO055Manager::getFilteredHeadingDegrees() {
 
   // Correct for upside-down sensor mounting
   #if SENSOR_UPSIDE_DOWN
-    heading = heading + 180.0f;
+    // Invert rotation direction (mirror) and add 180° offset
+    heading = 180.0f - heading;
+    if (heading < 0.0f) heading += 360.0f;
     if (heading >= 360.0f) heading -= 360.0f;
   #endif
 
