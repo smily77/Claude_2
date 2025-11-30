@@ -57,7 +57,7 @@ bool dataFilled = false;
 unsigned long lastSensorRead = 0;
 unsigned long lastDataStore = 0;
 const unsigned long SENSOR_INTERVAL = 10000;  // 10 Sekunden
-const unsigned long STORE_INTERVAL = 900000;  // 15 Minuten
+const unsigned long STORE_INTERVAL = 10000;   // 10 Sekunden (TEST - normal: 900000 = 15 Min)
 
 // Aktuelle Werte
 float currentTemp = 0;
@@ -279,8 +279,8 @@ void updateDisplay() {
   String tempStr = String(currentTemp, 1);
   lcd.drawString(tempStr, 55, boxY + 30);
 
-  lcd.setFont(&fonts::FreeSans9pt7b);
-  lcd.drawString("C", 55, boxY + 55);
+  lcd.setFont(&fonts::Font2);  // Kleinere Schrift für Einheit
+  lcd.drawString("C", 55, boxY + 58);
 
   // Luftfeuchtigkeit
   lcd.setFont(&fonts::FreeSansBold18pt7b);
@@ -288,8 +288,8 @@ void updateDisplay() {
   String humStr = String((int)currentHum);
   lcd.drawString(humStr, 160, boxY + 30);
 
-  lcd.setFont(&fonts::FreeSans9pt7b);
-  lcd.drawString("%", 160, boxY + 55);
+  lcd.setFont(&fonts::Font2);  // Kleinere Schrift für Einheit
+  lcd.drawString("%", 160, boxY + 58);
 
   // Luftdruck
   lcd.setFont(&fonts::FreeSansBold18pt7b);
@@ -297,8 +297,8 @@ void updateDisplay() {
   String pressStr = String((int)currentPress);
   lcd.drawString(pressStr, 265, boxY + 30);
 
-  lcd.setFont(&fonts::FreeSans9pt7b);
-  lcd.drawString("hPa", 265, boxY + 55);
+  lcd.setFont(&fonts::Font2);  // Kleinere Schrift für Einheit
+  lcd.drawString("hPa", 265, boxY + 58);
 }
 
 void drawGraphs() {
