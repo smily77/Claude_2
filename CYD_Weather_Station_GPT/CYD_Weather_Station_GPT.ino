@@ -124,11 +124,11 @@ void setup() {
   Serial.println("--- SYSTEM START (Sprite + Palette) ---");
 
   // --- Display Initialisierung ---
-  pinMode(BACKLIGHT_PIN, OUTPUT);
-  digitalWrite(BACKLIGHT_PIN, HIGH);
+ // pinMode(BACKLIGHT_PIN, OUTPUT);
+ // digitalWrite(BACKLIGHT_PIN, HIGH);
   lcd.init();
-  lcd.setRotation(1);
-  lcd.setBrightness(255); 
+  lcd.setRotation(3);
+  lcd.setBrightness(125); 
   lcd.fillScreen(TFT_BLACK); 
 
   // --- Sprite mit 4-Bit-Farbtiefe ---

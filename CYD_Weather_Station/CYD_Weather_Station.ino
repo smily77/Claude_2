@@ -57,7 +57,7 @@ bool dataFilled = false;
 unsigned long lastSensorRead = 0;
 unsigned long lastDataStore = 0;
 const unsigned long SENSOR_INTERVAL = 10000;  // 10 Sekunden
-const unsigned long STORE_INTERVAL = 10000;   // 10 Sekunden (TEST - normal: 900000 = 15 Min)
+const unsigned long STORE_INTERVAL = 900000;   // 10 Sekunden (TEST - normal: 900000 = 15 Min)
 
 // Aktuelle Werte
 float currentTemp = 0;
@@ -74,7 +74,7 @@ void setup() {
 
   // Display initialisieren
   lcd.init();
-  lcd.setRotation(1);  // Landscape (320x240)
+  lcd.setRotation(3);  // Landscape (320x240)
   lcd.setBrightness(255);
   lcd.fillScreen(COLOR_BG);
 
