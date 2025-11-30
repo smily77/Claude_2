@@ -3,21 +3,30 @@
  *
  * Zeigt Temperatur, Luftfeuchtigkeit und Luftdruck mit 24-Stunden-Graphen
  *
- * Hardware:
- * - CYD (ESP32-2432S028R)
+ * Voraussetzungen:
+ * - CYD_Display_Config.h muss vorhanden sein (definiert LGFX Klasse und optional extSDA/extSCL)
  * - BMP280 Sensor (I2C 0x77) - Temperatur & Luftdruck
  * - AHT20 Sensor (I2C 0x38) - Temperatur & Luftfeuchtigkeit
+ * - I2C Pins: extSDA und extSCL (Standard: GPIO 22 und 27)
  *
  * Bibliotheken (über Arduino Library Manager):
  * - LovyanGFX
- * - Adafruit BMP280
+ * - Adafruit BMP280 Library
  * - Adafruit AHTX0
  */
 
-#include "CYD_Display_Config.h"
+#include <CYD_Display_Config.h>
 #include <Wire.h>
 #include <Adafruit_BMP280.h>
 #include <Adafruit_AHTX0.h>
+
+// Fallback für I2C Pins, falls nicht im Header definiert
+#ifndef extSDA
+#define extSDA 22
+#endif
+#ifndef extSCL
+#define extSCL 27
+#endif
 
 // Display Objekt erstellen
 LGFX lcd;

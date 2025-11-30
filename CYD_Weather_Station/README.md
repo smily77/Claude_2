@@ -1,6 +1,6 @@
 # CYD Wetterstation mit 24-Stunden-Graphen
 
-Eine schöne Wetterstation für das CYD (Cheap Yellow Display - ESP32-2432S028R) mit BMP280 und AHT20 Sensoren.
+Eine schöne Wetterstation für das CYD (Cheap Yellow Display) mit BMP280 und AHT20 Sensoren.
 
 ## Features
 
@@ -11,13 +11,13 @@ Eine schöne Wetterstation für das CYD (Cheap Yellow Display - ESP32-2432S028R)
 - ✅ Display-Update alle 10 Sekunden
 - ✅ Schöne Farb-Kodierung für die verschiedenen Messwerte
 
-## Hardware
+## Voraussetzungen
 
-### CYD (Cheap Yellow Display)
-- ESP32-2432S028R
-- 2.8" TFT Display (320x240 Pixel)
-- ILI9341 Controller
-- XPT2046 Touch Controller
+### CYD_Display_Config.h
+**WICHTIG:** Du musst deine eigene `CYD_Display_Config.h` bereitstellen, die:
+- Die `LGFX` Klasse für dein spezifisches CYD-Board definiert
+- LovyanGFX korrekt konfiguriert
+- Optional `extSDA` und `extSCL` für I2C Pins definiert (Standard: GPIO 22 und 27)
 
 ### Sensoren (I2C)
 - **BMP280** (Adresse 0x77) - Temperatur & Luftdruck
@@ -47,13 +47,14 @@ Installation über Arduino Library Manager:
 
 ## Installation
 
-1. Bibliotheken über Arduino Library Manager installieren
-2. Sketch in Arduino IDE öffnen
-3. Board auswählen: "ESP32 Dev Module"
-4. Upload Speed: 115200
-5. Flash Size: 4MB
-6. Partition Scheme: Default
-7. Upload!
+1. Stelle sicher, dass deine `CYD_Display_Config.h` vorhanden ist
+2. Bibliotheken über Arduino Library Manager installieren:
+   - LovyanGFX
+   - Adafruit BMP280 Library
+   - Adafruit AHTX0
+3. Sketch in Arduino IDE öffnen
+4. Board-Einstellungen für dein ESP32-Board wählen
+5. Upload!
 
 ## Anzeige
 
@@ -80,10 +81,20 @@ Drei kompakte Graphen zeigen den 24-Stunden-Verlauf:
 ## Anpassungen
 
 ### I2C Pins ändern
-In `CYD_Display_Config.h`:
+Option 1: In deiner `CYD_Display_Config.h`:
 ```cpp
 #define extSDA 22  // Ändere hier die SDA Pin-Nummer
 #define extSCL 27  // Ändere hier die SCL Pin-Nummer
+```
+
+Option 2: Direkt im Sketch - ändere die Fallback-Werte:
+```cpp
+#ifndef extSDA
+#define extSDA 22  // Deine SDA Pin-Nummer
+#endif
+#ifndef extSCL
+#define extSCL 27  // Deine SCL Pin-Nummer
+#endif
 ```
 
 ### Messintervalle ändern
@@ -116,18 +127,9 @@ In `CYD_Weather_Station.ino`:
 4. Pull-Up Widerstände prüfen (oft schon auf Sensor-Boards vorhanden)
 
 ### Display bleibt schwarz
-1. CYD_Display_Config.h prüfen
-2. Backlight Pin prüfen (GPIO 21)
+1. CYD_Display_Config.h prüfen (LGFX Klasse korrekt konfiguriert?)
+2. Backlight-Konfiguration in CYD_Display_Config.h prüfen
 3. SPI Verbindung prüfen
-
-### Falsche Touch-Koordinaten
-Touch-Kalibrierung in `CYD_Display_Config.h` anpassen:
-```cpp
-cfg.x_min = 0;
-cfg.x_max = 239;
-cfg.y_min = 0;
-cfg.y_max = 319;
-```
 
 ## Serielle Ausgabe
 
