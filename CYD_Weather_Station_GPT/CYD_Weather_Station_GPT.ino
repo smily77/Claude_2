@@ -16,7 +16,7 @@
 
 // LGFX Objekt erstellen
 LGFX lcd;
-LGFX_Sprite sprite(&lcd);   // <-- wieder aktiv
+LGFX_Sprite sprite(&lcd);   // Sprite für double buffering
 
 // 2. Sensor Bibliotheken
 #include <Adafruit_AHTX0.h>
@@ -29,6 +29,7 @@ Adafruit_BMP280 bmp;
 const int graphWidth  = 240;
 const int graphHeight = 50;
 const unsigned long updateInterval = 6UL * 60UL * 1000UL; // 6 Minuten
+//const unsigned long updateInterval = 1UL * 10UL * 1000UL; // 6 Minuten
 
 float historyTemp[graphWidth];
 float historyHum[graphWidth];
@@ -37,6 +38,15 @@ float historyPress[graphWidth];
 unsigned long lastGraphUpdate = 0;
 unsigned long lastSensorRead  = 0;
 
+// ---- Palette-Indices für den 4-Bit-Sprite ----
+enum PaletteIndex : uint8_t {
+  PAL_BLACK    = 0,
+  PAL_WHITE    = 1,
+  PAL_DARKGREY = 2,
+  PAL_TEMP     = 3,
+  PAL_HUM      = 4,
+  PAL_PRESS    = 5,
+};
 
 // Hilfsfunktion: Array verschieben und neuen Wert anhängen
 void pushValue(float* data, float newValue, int size) {
@@ -48,24 +58,22 @@ void pushValue(float* data, float newValue, int size) {
   data[size - 1] = newValue;
 }
 
-// Template-Hilfsfunktion: Graph zeichnen
-// funktioniert mit jedem Objekt, das die LovyanGFX-API hat (lcd, sprite, …)
-template<typename G>
-void drawGraph(G& g,
+// Graph auf den SPRITE zeichnen (Farben = Palette-Indizes)
+void drawGraph(LGFX_Sprite& g,
                int x, int y,
                float* data,
                int width,
                int height,
-               uint16_t color,
+               uint8_t colorIndex,       // Palette-Index für die Kurve
                const String& label,
                const String& unit,
                float currentVal) 
 {
-  // Rahmen und Hintergrund für den Abschnitt
-  g.fillRect(x, y, 320, height + 30, 0x10A2); // Dunkelgrau Hintergrund
+  // Abschnitt-Hintergrund
+  g.fillRect(x, y, 320, height + 30, PAL_DARKGREY); // dunkler Hintergrund aus Palette
   
-  // Text Ausgabe (Großer Font)
-  g.setTextColor(TFT_WHITE, 0x10A2);
+  // Text
+  g.setTextColor(PAL_WHITE, PAL_DARKGREY);
   g.setFont(&fonts::FreeSansBold12pt7b);
   g.setCursor(x + 5, y + 5);
   g.print(label); 
@@ -79,7 +87,7 @@ void drawGraph(G& g,
     g.printf("%.1f %s", currentVal, unit.c_str());
   }
 
-  // Min/Max für Autoscaling finden
+  // Min/Max für Autoscaling
   float minVal = 10000;
   float maxVal = -10000;
   bool hasData = false;
@@ -97,7 +105,7 @@ void drawGraph(G& g,
   float range = maxVal - minVal;
   if (range == 0) range = 1.0f;
   
-  // Graph zeichnen
+  // Kurve zeichnen
   int prevY = 0;
   for (int i = 0; i < width; i++) {
     if (data[i] == 0 || isnan(data[i])) continue; 
@@ -105,7 +113,7 @@ void drawGraph(G& g,
     int pixelY = y + height + 25 - (int)((data[i] - minVal) / range * height);
     
     if (i > 0 && data[i - 1] != 0 && !isnan(data[i - 1])) {
-      g.drawLine(x + i, prevY, x + i + 1, pixelY, color);
+      g.drawLine(x + i, prevY, x + i + 1, pixelY, colorIndex); // Palette-Index als Farbe
     }
     prevY = pixelY;
   }
@@ -113,7 +121,7 @@ void drawGraph(G& g,
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("--- SYSTEM START (Sprite-Version) ---");
+  Serial.println("--- SYSTEM START (Sprite + Palette) ---");
 
   // --- Display Initialisierung ---
   pinMode(BACKLIGHT_PIN, OUTPUT);
@@ -123,12 +131,20 @@ void setup() {
   lcd.setBrightness(255); 
   lcd.fillScreen(TFT_BLACK); 
 
-  // Sprite anlegen (4-Bit Farbtiefe für CDY mit wenig RAM)
-  sprite.setColorDepth(4);          // 4 Bit = 16 Farben, ~38 kB für 320x240
+  // --- Sprite mit 4-Bit-Farbtiefe ---
+  sprite.setColorDepth(4);          // 4 Bit = 16 Farben
   if (!sprite.createSprite(320, 240)) {
     Serial.println("FEHLER: Sprite konnte nicht erstellt werden!");
   } else {
-    sprite.fillScreen(TFT_BLACK);
+    // Palette definieren (16 Einträge möglich, wir nutzen einige davon)
+    sprite.setPaletteColor(PAL_BLACK,    TFT_BLACK);
+    sprite.setPaletteColor(PAL_WHITE,    TFT_WHITE);
+    sprite.setPaletteColor(PAL_DARKGREY, 0x10A2);      // dein dunkelgrauer Hintergrund
+    sprite.setPaletteColor(PAL_TEMP,     TFT_ORANGE);  // Temperatur-Kurve
+    sprite.setPaletteColor(PAL_HUM,      TFT_CYAN);    // Feuchte-Kurve
+    sprite.setPaletteColor(PAL_PRESS,    TFT_GREEN);   // Druck-Kurve
+
+    sprite.fillScreen(PAL_BLACK);
   }
   
   // --- Sensoren Initialisierung ---
@@ -160,10 +176,10 @@ void loop() {
   sensors_event_t humidity, temp_aht;
   
   bool aht_read_ok = aht.getEvent(&humidity, &temp_aht);
-  float currentTemp = aht_read_ok ? temp_aht.temperature          : NAN;
-  float currentHum  = aht_read_ok ? humidity.relative_humidity    : NAN;
+  float currentTemp = aht_read_ok ? temp_aht.temperature       : NAN;
+  float currentHum  = aht_read_ok ? humidity.relative_humidity : NAN;
   
-  float pressure_pa = bmp.readPressure(); 
+  float pressure_pa  = bmp.readPressure(); 
   float currentPress = pressure_pa > 500.0F ? pressure_pa / 100.0F : NAN; 
 
   // --- Daten Historie Update (alle 6 Minuten) ---
@@ -176,15 +192,14 @@ void loop() {
 
   // --- Zeichnen (ca. jede Sekunde) ---
   if (millis() - lastSensorRead > 1000) { 
-    // NICHT mehr direkt das LCD löschen -> kein Flackern
-    // Stattdessen: komplettes Frame in den Sprite zeichnen
-    sprite.fillScreen(TFT_BLACK);
+    // komplettes Frame in Sprite aufbauen
+    sprite.fillScreen(PAL_BLACK);
     
-    drawGraph(sprite, 0,   0,  historyTemp,  graphWidth, 40, TFT_ORANGE, "Temp",   "C",   currentTemp);
-    drawGraph(sprite, 0,  80,  historyHum,   graphWidth, 40, TFT_CYAN,   "Feuchte","%",   currentHum);
-    drawGraph(sprite, 0, 160,  historyPress, graphWidth, 40, TFT_GREEN,  "Druck",  "hPa", currentPress);
+    drawGraph(sprite, 0,   0, historyTemp,  graphWidth, 40, PAL_TEMP,  "Temp",   "C",   currentTemp);
+    drawGraph(sprite, 0,  80, historyHum,   graphWidth, 40, PAL_HUM,   "Feuchte","%",   currentHum);
+    drawGraph(sprite, 0, 160, historyPress, graphWidth, 40, PAL_PRESS, "Druck",  "hP", currentPress);
 
-    // Am Ende EIN push auf das Display
+    // und dann in einem Rutsch auf das Display
     sprite.pushSprite(0, 0);
 
     lastSensorRead = millis();
