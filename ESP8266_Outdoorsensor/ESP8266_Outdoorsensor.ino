@@ -130,6 +130,10 @@ void onDataSent(uint8_t *mac_addr, uint8_t sendStatus) {
 void setup() {
   startTime = millis();
 
+  // Variablen deklarieren (vor goto Label)
+  int addPeerResult = 0;
+  uint8_t sendResult = 0;
+
   // Serielle Kommunikation starten (nur wenn DEBUG)
   if (DEBUG) {
     Serial.begin(9600);
@@ -229,7 +233,7 @@ void setup() {
   esp_now_register_send_cb(onDataSent);
 
   // Empfänger hinzufügen
-  int addPeerResult = esp_now_add_peer(receiverMAC, ESP_NOW_ROLE_SLAVE, ESPNOW_CHANNEL, NULL, 0);
+  addPeerResult = esp_now_add_peer(receiverMAC, ESP_NOW_ROLE_SLAVE, ESPNOW_CHANNEL, NULL, 0);
   if (addPeerResult != 0) {
     if (DEBUG) {
       Serial.print("Failed to add peer, error: ");
@@ -251,7 +255,7 @@ void setup() {
     Serial.println(" bytes");
   }
 
-  uint8_t sendResult = esp_now_send(receiverMAC, (uint8_t *)&sensorData, sizeof(sensorData));
+  sendResult = esp_now_send(receiverMAC, (uint8_t *)&sensorData, sizeof(sensorData));
 
   if (DEBUG) {
     Serial.print("Send result: ");
