@@ -194,8 +194,8 @@ void drawIndoorSection() {
   // Box Rahmen zeichnen
   drawSensorBox(boxX, boxY, boxW, boxH, "INDOOR", COLOR_INDOOR, indoorReceived);
 
-  // Sprite-Bereich unterhalb des Titels (Titel braucht ~30px)
-  int titleHeight = 30;
+  // Sprite-Bereich unterhalb des Titels (Titel braucht ~42px)
+  int titleHeight = 42;
   int spriteY = boxY + titleHeight;
   int spriteW = boxW - 4;
   int spriteH = boxH - titleHeight - 2;
@@ -227,11 +227,13 @@ void drawIndoorSection() {
   int lineHeight = is480p ? 35 : 28;
   int centerX = spriteW / 2;
 
-  // Temperatur mit korrektem Gradzeichen
+  // Temperatur mit Gradzeichen (char 176)
   indoorSprite.setFont(is480p ? &fonts::FreeSansBold18pt7b : &fonts::FreeSansBold12pt7b);
   indoorSprite.setTextColor(COLOR_TEMP);
   indoorSprite.setTextDatum(middle_center);
-  indoorSprite.drawString(String(indoorData.temperature, 1) + "\xB0" + "C", centerX, contentY);
+  char tempStr[16];
+  snprintf(tempStr, sizeof(tempStr), "%.1f%cC", indoorData.temperature, 176);
+  indoorSprite.drawString(tempStr, centerX, contentY);
   contentY += lineHeight;
 
   // Luftfeuchtigkeit
@@ -283,8 +285,8 @@ void drawOutdoorSection() {
   // Box Rahmen zeichnen
   drawSensorBox(boxX, boxY, boxW, boxH, "OUTDOOR", COLOR_OUTDOOR, outdoorReceived);
 
-  // Sprite-Bereich unterhalb des Titels (Titel braucht ~30px)
-  int titleHeight = 30;
+  // Sprite-Bereich unterhalb des Titels (Titel braucht ~42px)
+  int titleHeight = 42;
   int spriteY = boxY + titleHeight;
   int spriteW = boxW - 4;
   int spriteH = boxH - titleHeight - 2;
@@ -316,11 +318,13 @@ void drawOutdoorSection() {
   int lineHeight = is480p ? 35 : 28;
   int centerX = spriteW / 2;
 
-  // Temperatur mit korrektem Gradzeichen
+  // Temperatur mit Gradzeichen (char 176)
   outdoorSprite.setFont(is480p ? &fonts::FreeSansBold18pt7b : &fonts::FreeSansBold12pt7b);
   outdoorSprite.setTextColor(COLOR_TEMP);
   outdoorSprite.setTextDatum(middle_center);
-  outdoorSprite.drawString(String(outdoorData.temperature, 1) + "\xB0" + "C", centerX, contentY);
+  char tempStr[16];
+  snprintf(tempStr, sizeof(tempStr), "%.1f%cC", outdoorData.temperature, 176);
+  outdoorSprite.drawString(tempStr, centerX, contentY);
   contentY += lineHeight;
 
   // Kein Luftfeuchtigkeit bei Outdoor
@@ -413,7 +417,7 @@ void setup() {
   drawSensorBox(screenWidth / 2 + 5, boxY, boxW, boxH, "OUTDOOR", COLOR_OUTDOOR, false);
 
   // Warte-Text mit Sprites zeichnen (unterhalb der Titel)
-  int titleHeight = 30;
+  int titleHeight = 42;
   int spriteY = boxY + titleHeight;
   int spriteW = boxW - 4;
   int spriteH = boxH - titleHeight - 2;
