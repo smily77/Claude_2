@@ -194,10 +194,14 @@ void drawIndoorSection() {
   // Box Rahmen zeichnen
   drawSensorBox(boxX, boxY, boxW, boxH, "INDOOR", COLOR_INDOOR, indoorReceived);
 
+  // Sprite-Bereich unterhalb des Titels (Titel braucht ~30px)
+  int titleHeight = 30;
+  int spriteY = boxY + titleHeight;
+  int spriteW = boxW - 4;
+  int spriteH = boxH - titleHeight - 2;
+
   if (!indoorReceived) {
     // Sprite mit "Warte auf Daten" erstellen
-    int spriteW = boxW - 4;
-    int spriteH = boxH - 4;
     indoorSprite.createSprite(spriteW, spriteH);
     indoorSprite.fillSprite(COLOR_BG);
 
@@ -208,28 +212,26 @@ void drawIndoorSection() {
     indoorSprite.drawString("Warte auf", spriteW / 2, spriteH / 2 - 15);
     indoorSprite.drawString("Daten...", spriteW / 2, spriteH / 2 + 10);
 
-    // Sprite auf Display pushen
-    indoorSprite.pushSprite(boxX + 2, boxY + 2);
+    // Sprite auf Display pushen (unterhalb des Titels)
+    indoorSprite.pushSprite(boxX + 2, spriteY);
     indoorSprite.deleteSprite();
     return;
   }
 
   // Sprite für Inhalt erstellen
-  int spriteW = boxW - 4;
-  int spriteH = boxH - 4;
   indoorSprite.createSprite(spriteW, spriteH);
   indoorSprite.fillSprite(COLOR_BG);
 
   // Inhalt in Sprite zeichnen
-  int contentY = 25;  // Relative Position im Sprite
+  int contentY = 15;  // Relative Position im Sprite
   int lineHeight = is480p ? 35 : 28;
   int centerX = spriteW / 2;
 
-  // Temperatur
+  // Temperatur mit korrektem Gradzeichen
   indoorSprite.setFont(is480p ? &fonts::FreeSansBold18pt7b : &fonts::FreeSansBold12pt7b);
   indoorSprite.setTextColor(COLOR_TEMP);
   indoorSprite.setTextDatum(middle_center);
-  indoorSprite.drawString(String(indoorData.temperature, 1) + "°C", centerX, contentY);
+  indoorSprite.drawString(String(indoorData.temperature, 1) + "\xB0" + "C", centerX, contentY);
   contentY += lineHeight;
 
   // Luftfeuchtigkeit
@@ -266,8 +268,8 @@ void drawIndoorSection() {
   indoorSprite.setTextColor(COLOR_TEXT_DIM);
   indoorSprite.drawString(formatTime(secondsAgo), centerX, contentY);
 
-  // Sprite auf Display pushen und freigeben
-  indoorSprite.pushSprite(boxX + 2, boxY + 2);
+  // Sprite auf Display pushen und freigeben (unterhalb des Titels)
+  indoorSprite.pushSprite(boxX + 2, spriteY);
   indoorSprite.deleteSprite();
 }
 
@@ -281,10 +283,14 @@ void drawOutdoorSection() {
   // Box Rahmen zeichnen
   drawSensorBox(boxX, boxY, boxW, boxH, "OUTDOOR", COLOR_OUTDOOR, outdoorReceived);
 
+  // Sprite-Bereich unterhalb des Titels (Titel braucht ~30px)
+  int titleHeight = 30;
+  int spriteY = boxY + titleHeight;
+  int spriteW = boxW - 4;
+  int spriteH = boxH - titleHeight - 2;
+
   if (!outdoorReceived) {
     // Sprite mit "Warte auf Daten" erstellen
-    int spriteW = boxW - 4;
-    int spriteH = boxH - 4;
     outdoorSprite.createSprite(spriteW, spriteH);
     outdoorSprite.fillSprite(COLOR_BG);
 
@@ -295,28 +301,26 @@ void drawOutdoorSection() {
     outdoorSprite.drawString("Warte auf", spriteW / 2, spriteH / 2 - 15);
     outdoorSprite.drawString("Daten...", spriteW / 2, spriteH / 2 + 10);
 
-    // Sprite auf Display pushen
-    outdoorSprite.pushSprite(boxX + 2, boxY + 2);
+    // Sprite auf Display pushen (unterhalb des Titels)
+    outdoorSprite.pushSprite(boxX + 2, spriteY);
     outdoorSprite.deleteSprite();
     return;
   }
 
   // Sprite für Inhalt erstellen
-  int spriteW = boxW - 4;
-  int spriteH = boxH - 4;
   outdoorSprite.createSprite(spriteW, spriteH);
   outdoorSprite.fillSprite(COLOR_BG);
 
   // Inhalt in Sprite zeichnen
-  int contentY = 25;  // Relative Position im Sprite
+  int contentY = 15;  // Relative Position im Sprite
   int lineHeight = is480p ? 35 : 28;
   int centerX = spriteW / 2;
 
-  // Temperatur
+  // Temperatur mit korrektem Gradzeichen
   outdoorSprite.setFont(is480p ? &fonts::FreeSansBold18pt7b : &fonts::FreeSansBold12pt7b);
   outdoorSprite.setTextColor(COLOR_TEMP);
   outdoorSprite.setTextDatum(middle_center);
-  outdoorSprite.drawString(String(outdoorData.temperature, 1) + "°C", centerX, contentY);
+  outdoorSprite.drawString(String(outdoorData.temperature, 1) + "\xB0" + "C", centerX, contentY);
   contentY += lineHeight;
 
   // Kein Luftfeuchtigkeit bei Outdoor
@@ -353,8 +357,8 @@ void drawOutdoorSection() {
   outdoorSprite.setTextColor(COLOR_TEXT_DIM);
   outdoorSprite.drawString(formatTime(secondsAgo), centerX, contentY);
 
-  // Sprite auf Display pushen und freigeben
-  outdoorSprite.pushSprite(boxX + 2, boxY + 2);
+  // Sprite auf Display pushen und freigeben (unterhalb des Titels)
+  outdoorSprite.pushSprite(boxX + 2, spriteY);
   outdoorSprite.deleteSprite();
 }
 
@@ -408,27 +412,32 @@ void setup() {
   // Outdoor Box
   drawSensorBox(screenWidth / 2 + 5, boxY, boxW, boxH, "OUTDOOR", COLOR_OUTDOOR, false);
 
-  // Warte-Text mit Sprites zeichnen
+  // Warte-Text mit Sprites zeichnen (unterhalb der Titel)
+  int titleHeight = 30;
+  int spriteY = boxY + titleHeight;
+  int spriteW = boxW - 4;
+  int spriteH = boxH - titleHeight - 2;
+
   // Indoor Sprite
-  indoorSprite.createSprite(boxW - 4, boxH - 4);
+  indoorSprite.createSprite(spriteW, spriteH);
   indoorSprite.fillSprite(COLOR_BG);
   indoorSprite.setFont(&fonts::FreeSans9pt7b);
   indoorSprite.setTextColor(COLOR_TEXT_DIM);
   indoorSprite.setTextDatum(middle_center);
-  indoorSprite.drawString("Warte auf", (boxW - 4) / 2, (boxH - 4) / 2 - 15);
-  indoorSprite.drawString("Daten...", (boxW - 4) / 2, (boxH - 4) / 2 + 10);
-  indoorSprite.pushSprite(7, boxY + 2);
+  indoorSprite.drawString("Warte auf", spriteW / 2, spriteH / 2 - 15);
+  indoorSprite.drawString("Daten...", spriteW / 2, spriteH / 2 + 10);
+  indoorSprite.pushSprite(7, spriteY);
   indoorSprite.deleteSprite();
 
   // Outdoor Sprite
-  outdoorSprite.createSprite(boxW - 4, boxH - 4);
+  outdoorSprite.createSprite(spriteW, spriteH);
   outdoorSprite.fillSprite(COLOR_BG);
   outdoorSprite.setFont(&fonts::FreeSans9pt7b);
   outdoorSprite.setTextColor(COLOR_TEXT_DIM);
   outdoorSprite.setTextDatum(middle_center);
-  outdoorSprite.drawString("Warte auf", (boxW - 4) / 2, (boxH - 4) / 2 - 15);
-  outdoorSprite.drawString("Daten...", (boxW - 4) / 2, (boxH - 4) / 2 + 10);
-  outdoorSprite.pushSprite(screenWidth / 2 + 7, boxY + 2);
+  outdoorSprite.drawString("Warte auf", spriteW / 2, spriteH / 2 - 15);
+  outdoorSprite.drawString("Daten...", spriteW / 2, spriteH / 2 + 10);
+  outdoorSprite.pushSprite(screenWidth / 2 + 7, spriteY);
   outdoorSprite.deleteSprite();
 
   // WiFi im Station Mode starten
