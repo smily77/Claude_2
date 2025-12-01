@@ -45,10 +45,10 @@ uint8_t receiverMAC[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};  // Broadcast
   #define SLEEP_TIME_MINUTES 15       // Outdoor: alle 15 Minuten
 #endif
 
-// Battery Protection
+// Battery Protection (bei niedrigem Akku länger schlafen)
 #define BATTERY_LIMIT 2600        // mV - unter diesem Wert wird länger geschlafen
 #ifdef INDOOR
-  #define BATTERY_EXTRA_CYCLES 240  // Indoor: 240 * 60s = 4 Stunden
+  #define BATTERY_EXTRA_CYCLES 30   // Indoor: 30 * 60s = 30 Minuten
 #else
   #define BATTERY_EXTRA_CYCLES 2    // Outdoor: 2 * 15min = 30 Minuten
 #endif
