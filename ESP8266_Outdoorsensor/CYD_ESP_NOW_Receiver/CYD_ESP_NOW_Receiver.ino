@@ -15,6 +15,7 @@
  * - Batterie-Warnungen
  * - Signal-Stärke (RSSI)
  * - Letzter Empfangszeitpunkt
+ * - Memory-optimiert: Sprites werden nur einmal erstellt
  */
 
 #include <CYD_Display_Config.h>
@@ -35,20 +36,22 @@
 
 // ==================== FARBEN ====================
 
-#define COLOR_BG          0x0008   // Sehr dunkles Blau
+#define COLOR_TEXT_DIM    0x8410   // Grau
+#define COLOR_BG          0x0002 // 0x0008   // Sehr dunkles Blau
 #define COLOR_HEADER      0x001F   // Blau
 #define COLOR_INDOOR      0x07FF   // Cyan
 #define COLOR_OUTDOOR     0xFD20   // Orange
-#define COLOR_TEMP        0xF800   // Rot
+#define COLOR_TEMP        0xFFFF //0xF800   // Rot
 #define COLOR_HUM         0x07FF   // Cyan
 #define COLOR_PRESS       0x07E0   // Grün
-#define COLOR_BATTERY_OK  0x07E0   // Grün
+#define COLOR_BATTERY_OK  0x0500 // 0x07E0   // Grün
 #define COLOR_BATTERY_LOW 0xF800   // Rot
 #define COLOR_TEXT        0xFFFF   // Weiß
 #define COLOR_TEXT_DIM    0x8410   // Grau
-#define COLOR_RSSI_GOOD   0x07E0   // Grün
-#define COLOR_RSSI_MEDIUM 0xFD20   // Orange
-#define COLOR_RSSI_POOR   0xF800   // Rot
+#define COLOR_RSSI_GOOD   0x0500 // 0x07E0   // Grün
+#define COLOR_RSSI_MEDIUM 0x6800 //0xFD20   // Orange
+#define COLOR_RSSI_POOR   0x6000 // 0xF800   // Rot
+#define COLOR_BACKGROUND  0x0002
 
 // ==================== DATENSTRUKTUR ====================
 
@@ -82,7 +85,7 @@ typedef struct sensor_data_outdoor {
 
 LGFX lcd;  // Display Objekt
 
-// Sprites für flicker-freies Rendering (4-Byte color depth)
+// Sprites für flicker-freies Rendering (werden EINMAL erstellt)
 LGFX_Sprite indoorSprite(&lcd);
 LGFX_Sprite outdoorSprite(&lcd);
 
@@ -91,6 +94,10 @@ sensor_data_outdoor outdoorData;
 
 bool indoorReceived = false;
 bool outdoorReceived = false;
+
+// Update-Flags für thread-sichere Updates
+bool indoorNeedsUpdate = false;
+bool outdoorNeedsUpdate = false;
 
 unsigned long lastIndoorReceive = 0;
 unsigned long lastOutdoorReceive = 0;
@@ -114,25 +121,23 @@ void onDataRecv(const esp_now_recv_info* recv_info, const uint8_t *data, int dat
     indoorReceived = true;
     lastIndoorReceive = millis();
     indoorRSSI = recv_info->rx_ctrl->rssi;
+    indoorNeedsUpdate = true;  // Flag setzen statt direkt zeichnen
 
     Serial.println("\n=== Indoor Data Received ===");
     Serial.printf("Temp: %.1f°C, Hum: %.1f%%, Press: %.1f mbar\n",
                   indoorData.temperature, indoorData.humidity, indoorData.pressure);
     Serial.printf("Battery: %d mV, RSSI: %d dBm\n", indoorData.battery_voltage, indoorRSSI);
-
-    drawIndoorSection();
   } else {
     memcpy(&outdoorData, data, min((int)sizeof(outdoorData), data_len));
     outdoorReceived = true;
     lastOutdoorReceive = millis();
     outdoorRSSI = recv_info->rx_ctrl->rssi;
+    outdoorNeedsUpdate = true;  // Flag setzen statt direkt zeichnen
 
     Serial.println("\n=== Outdoor Data Received ===");
     Serial.printf("Temp: %.1f°C, Press: %.1f mbar\n",
                   outdoorData.temperature, outdoorData.pressure);
     Serial.printf("Battery: %d mV, RSSI: %d dBm\n", outdoorData.battery_voltage, outdoorRSSI);
-
-    drawOutdoorSection();
   }
 }
 
@@ -178,61 +183,53 @@ void drawSensorBox(int x, int y, int w, int h, const char* title, uint16_t color
   lcd.drawRoundRect(x, y, w, h, 8, color);
 
   // Titel
-  lcd.setFont(&fonts::FreeSansBold9pt7b);
+  lcd.setFont(&fonts::FreeSansBold12pt7b);
   lcd.setTextColor(color);
   lcd.setTextDatum(top_center);
   lcd.drawString(title, x + w / 2, y + 8);
 }
 
-// Indoor Sektion zeichnen (mit Sprite)
+// Indoor Sektion zeichnen (mit Sprite - KEIN deleteSprite mehr!)
 void drawIndoorSection() {
   int boxX = 5;
-  int boxY = is480p ? 70 : 55;  // +10px mehr Abstand zum Header
+  int boxY = is480p ? 70 : 55;
   int boxW = screenWidth / 2 - 10;
   int boxH = screenHeight - boxY - 5;
 
   // Box Rahmen zeichnen
   drawSensorBox(boxX, boxY, boxW, boxH, "INDOOR", COLOR_INDOOR, indoorReceived);
 
-  // Sprite-Bereich unterhalb des Titels (Titel braucht ~42px)
+  // Sprite-Bereich unterhalb des Titels
   int titleHeight = 42;
   int spriteY = boxY + titleHeight;
   int spriteW = boxW - 4;
   int spriteH = boxH - titleHeight - 2;
 
-  if (!indoorReceived) {
-    // Sprite mit "Warte auf Daten" erstellen
-    indoorSprite.createSprite(spriteW, spriteH);
-    indoorSprite.fillSprite(COLOR_BG);
+  // Sprite nur füllen, nicht neu erstellen!
+  indoorSprite.fillSprite(COLOR_BG);
 
+  if (!indoorReceived) {
     // Warte-Text in Sprite
     indoorSprite.setFont(&fonts::FreeSans9pt7b);
     indoorSprite.setTextColor(COLOR_TEXT_DIM);
     indoorSprite.setTextDatum(middle_center);
     indoorSprite.drawString("Warte auf", spriteW / 2, spriteH / 2 - 15);
     indoorSprite.drawString("Daten...", spriteW / 2, spriteH / 2 + 10);
-
-    // Sprite auf Display pushen (unterhalb des Titels)
     indoorSprite.pushSprite(boxX + 2, spriteY);
-    indoorSprite.deleteSprite();
     return;
   }
 
-  // Sprite für Inhalt erstellen
-  indoorSprite.createSprite(spriteW, spriteH);
-  indoorSprite.fillSprite(COLOR_BG);
-
   // Inhalt in Sprite zeichnen
-  int contentY = 15;  // Relative Position im Sprite
+  int contentY = 15;
   int lineHeight = is480p ? 35 : 28;
   int centerX = spriteW / 2;
 
-  // Temperatur mit Gradzeichen (char 176)
-  indoorSprite.setFont(is480p ? &fonts::FreeSansBold18pt7b : &fonts::FreeSansBold12pt7b);
+  // Temperatur mit Gradzeichen
+  indoorSprite.setFont(is480p ? &fonts::FreeSansBold24pt7b : &fonts::FreeSansBold18pt7b);
   indoorSprite.setTextColor(COLOR_TEMP);
   indoorSprite.setTextDatum(middle_center);
   char tempStr[16];
-  snprintf(tempStr, sizeof(tempStr), "%.1f%cC", indoorData.temperature, 176);
+  snprintf(tempStr, sizeof(tempStr), "%.1f%cC", indoorData.temperature, 32);
   indoorSprite.drawString(tempStr, centerX, contentY);
   contentY += lineHeight;
 
@@ -248,7 +245,8 @@ void drawIndoorSection() {
   contentY += lineHeight;
 
   // Batterie
-  indoorSprite.setFont(&fonts::FreeSans9pt7b);
+  //indoorSprite.setFont(&fonts::FreeSans9pt7b);
+  indoorSprite.setFont(&fonts::Font2);
   uint16_t battColor = indoorData.battery_warning ? COLOR_BATTERY_LOW : COLOR_BATTERY_OK;
   indoorSprite.setTextColor(battColor);
   indoorSprite.drawString(String(indoorData.battery_voltage) + " mV", centerX, contentY);
@@ -256,74 +254,68 @@ void drawIndoorSection() {
     indoorSprite.setTextColor(COLOR_BATTERY_LOW);
     indoorSprite.drawString("LOW!", centerX, contentY + 18);
   }
-  contentY += lineHeight + 5;
+  contentY += lineHeight -12; //+5
 
   // RSSI
-  indoorSprite.setFont(&fonts::FreeSans9pt7b);
+  //indoorSprite.setFont(&fonts::FreeSans9pt7b);
+  indoorSprite.setFont(&fonts::Font2);
   indoorSprite.setTextColor(getRSSIColor(indoorRSSI));
   indoorSprite.drawString("RSSI: " + String(indoorRSSI) + " dBm", centerX, contentY);
-  contentY += 22;
+  //contentY += 22;
+  contentY += lineHeight -12;
 
   // Letzter Empfang
   unsigned long secondsAgo = (millis() - lastIndoorReceive) / 1000;
-  indoorSprite.setFont(&fonts::FreeSans9pt7b);
+  //indoorSprite.setFont(&fonts::FreeSans9pt7b);
+  indoorSprite.setFont(&fonts::Font2);
   indoorSprite.setTextColor(COLOR_TEXT_DIM);
   indoorSprite.drawString(formatTime(secondsAgo), centerX, contentY);
 
-  // Sprite auf Display pushen und freigeben (unterhalb des Titels)
+  // Sprite auf Display pushen (KEIN deleteSprite!)
   indoorSprite.pushSprite(boxX + 2, spriteY);
-  indoorSprite.deleteSprite();
 }
 
-// Outdoor Sektion zeichnen (mit Sprite)
+// Outdoor Sektion zeichnen (mit Sprite - KEIN deleteSprite mehr!)
 void drawOutdoorSection() {
   int boxX = screenWidth / 2 + 5;
-  int boxY = is480p ? 70 : 55;  // +10px mehr Abstand zum Header
+  int boxY = is480p ? 70 : 55;
   int boxW = screenWidth / 2 - 10;
   int boxH = screenHeight - boxY - 5;
 
   // Box Rahmen zeichnen
   drawSensorBox(boxX, boxY, boxW, boxH, "OUTDOOR", COLOR_OUTDOOR, outdoorReceived);
 
-  // Sprite-Bereich unterhalb des Titels (Titel braucht ~42px)
+  // Sprite-Bereich unterhalb des Titels
   int titleHeight = 42;
   int spriteY = boxY + titleHeight;
   int spriteW = boxW - 4;
   int spriteH = boxH - titleHeight - 2;
 
-  if (!outdoorReceived) {
-    // Sprite mit "Warte auf Daten" erstellen
-    outdoorSprite.createSprite(spriteW, spriteH);
-    outdoorSprite.fillSprite(COLOR_BG);
+  // Sprite nur füllen, nicht neu erstellen!
+  outdoorSprite.fillSprite(COLOR_BG);
 
+  if (!outdoorReceived) {
     // Warte-Text in Sprite
     outdoorSprite.setFont(&fonts::FreeSans9pt7b);
     outdoorSprite.setTextColor(COLOR_TEXT_DIM);
     outdoorSprite.setTextDatum(middle_center);
     outdoorSprite.drawString("Warte auf", spriteW / 2, spriteH / 2 - 15);
     outdoorSprite.drawString("Daten...", spriteW / 2, spriteH / 2 + 10);
-
-    // Sprite auf Display pushen (unterhalb des Titels)
     outdoorSprite.pushSprite(boxX + 2, spriteY);
-    outdoorSprite.deleteSprite();
     return;
   }
 
-  // Sprite für Inhalt erstellen
-  outdoorSprite.createSprite(spriteW, spriteH);
-  outdoorSprite.fillSprite(COLOR_BG);
-
   // Inhalt in Sprite zeichnen
-  int contentY = 15;  // Relative Position im Sprite
+  int contentY = 15;
   int lineHeight = is480p ? 35 : 28;
   int centerX = spriteW / 2;
 
-  // Temperatur mit Gradzeichen (char 176)
-  outdoorSprite.setFont(is480p ? &fonts::FreeSansBold18pt7b : &fonts::FreeSansBold12pt7b);
+  // Temperatur mit Gradzeichen
+  outdoorSprite.setFont(is480p ? &fonts::FreeSansBold24pt7b : &fonts::FreeSansBold18pt7b);
   outdoorSprite.setTextColor(COLOR_TEMP);
   outdoorSprite.setTextDatum(middle_center);
   char tempStr[16];
-  snprintf(tempStr, sizeof(tempStr), "%.1f%cC", outdoorData.temperature, 176);
+  snprintf(tempStr, sizeof(tempStr), "%.1f%cC", outdoorData.temperature, 32);
   outdoorSprite.drawString(tempStr, centerX, contentY);
   contentY += lineHeight;
 
@@ -339,7 +331,8 @@ void drawOutdoorSection() {
   contentY += lineHeight;
 
   // Batterie
-  outdoorSprite.setFont(&fonts::FreeSans9pt7b);
+  //outdoorSprite.setFont(&fonts::FreeSans9pt7b);
+  outdoorSprite.setFont(&fonts::Font2);
   uint16_t battColor = outdoorData.battery_warning ? COLOR_BATTERY_LOW : COLOR_BATTERY_OK;
   outdoorSprite.setTextColor(battColor);
   outdoorSprite.drawString(String(outdoorData.battery_voltage) + " mV", centerX, contentY);
@@ -347,29 +340,29 @@ void drawOutdoorSection() {
     outdoorSprite.setTextColor(COLOR_BATTERY_LOW);
     outdoorSprite.drawString("LOW!", centerX, contentY + 18);
   }
-  contentY += lineHeight + 5;
+  contentY += lineHeight - 12;
 
   // RSSI
-  outdoorSprite.setFont(&fonts::FreeSans9pt7b);
+  //outdoorSprite.setFont(&fonts::FreeSans9pt7b);
+  outdoorSprite.setFont(&fonts::Font2);
   outdoorSprite.setTextColor(getRSSIColor(outdoorRSSI));
   outdoorSprite.drawString("RSSI: " + String(outdoorRSSI) + " dBm", centerX, contentY);
-  contentY += 22;
+  //contentY += 22;
+  contentY += lineHeight - 12;
 
   // Letzter Empfang
   unsigned long secondsAgo = (millis() - lastOutdoorReceive) / 1000;
-  outdoorSprite.setFont(&fonts::FreeSans9pt7b);
+  //outdoorSprite.setFont(&fonts::FreeSans9pt7b);
+  outdoorSprite.setFont(&fonts::Font2);
   outdoorSprite.setTextColor(COLOR_TEXT_DIM);
   outdoorSprite.drawString(formatTime(secondsAgo), centerX, contentY);
 
-  // Sprite auf Display pushen und freigeben (unterhalb des Titels)
+  // Sprite auf Display pushen (KEIN deleteSprite!)
   outdoorSprite.pushSprite(boxX + 2, spriteY);
-  outdoorSprite.deleteSprite();
 }
 
-// Zeit-Updates (komplett mit Sprites neuzeichnen)
+// Zeit-Updates
 void updateTimes() {
-  // Indoor und Outdoor komplett neuzeichnen mit aktueller Zeit
-  // Sprites verhindern Flackern und Artifacts
   if (indoorReceived) {
     drawIndoorSection();
   }
@@ -390,7 +383,7 @@ void setup() {
   // Display initialisieren
   lcd.init();
   lcd.setRotation(DISPLAY_ROTATION);
-  lcd.setBrightness(255);
+  lcd.setBrightness(128);
 
   // Display-Größe erkennen
   screenWidth = lcd.width();
@@ -400,30 +393,31 @@ void setup() {
   Serial.printf("Display: %dx%d\n", screenWidth, screenHeight);
 
   // Hintergrund
-  lcd.fillScreen(COLOR_BG);
+  lcd.fillScreen(COLOR_BACKGROUND);
 
   // Header zeichnen
   drawHeader();
 
-  // Startbildschirm - beide Boxen mit korrektem Abstand
-  int boxY = is480p ? 70 : 55;  // Angepasster Abstand
+  // Sprite-Dimensionen berechnen
+  int boxY = is480p ? 70 : 55;
   int boxH = screenHeight - boxY - 5;
   int boxW = screenWidth / 2 - 10;
-
-  // Indoor Box
-  drawSensorBox(5, boxY, boxW, boxH, "INDOOR", COLOR_INDOOR, false);
-
-  // Outdoor Box
-  drawSensorBox(screenWidth / 2 + 5, boxY, boxW, boxH, "OUTDOOR", COLOR_OUTDOOR, false);
-
-  // Warte-Text mit Sprites zeichnen (unterhalb der Titel)
   int titleHeight = 42;
-  int spriteY = boxY + titleHeight;
   int spriteW = boxW - 4;
   int spriteH = boxH - titleHeight - 2;
 
-  // Indoor Sprite
+  // Sprites EINMAL erstellen (werden nie gelöscht!)
   indoorSprite.createSprite(spriteW, spriteH);
+  outdoorSprite.createSprite(spriteW, spriteH);
+  Serial.printf("✓ Sprites created: %dx%d\n", spriteW, spriteH);
+
+  // Startbildschirm - beide Boxen
+  drawSensorBox(5, boxY, boxW, boxH, "INDOOR", COLOR_INDOOR, false);
+  drawSensorBox(screenWidth / 2 + 5, boxY, boxW, boxH, "OUTDOOR", COLOR_OUTDOOR, false);
+
+  // Warte-Text in Sprites
+  int spriteY = boxY + titleHeight;
+
   indoorSprite.fillSprite(COLOR_BG);
   indoorSprite.setFont(&fonts::FreeSans9pt7b);
   indoorSprite.setTextColor(COLOR_TEXT_DIM);
@@ -431,10 +425,7 @@ void setup() {
   indoorSprite.drawString("Warte auf", spriteW / 2, spriteH / 2 - 15);
   indoorSprite.drawString("Daten...", spriteW / 2, spriteH / 2 + 10);
   indoorSprite.pushSprite(7, spriteY);
-  indoorSprite.deleteSprite();
 
-  // Outdoor Sprite
-  outdoorSprite.createSprite(spriteW, spriteH);
   outdoorSprite.fillSprite(COLOR_BG);
   outdoorSprite.setFont(&fonts::FreeSans9pt7b);
   outdoorSprite.setTextColor(COLOR_TEXT_DIM);
@@ -442,7 +433,6 @@ void setup() {
   outdoorSprite.drawString("Warte auf", spriteW / 2, spriteH / 2 - 15);
   outdoorSprite.drawString("Daten...", spriteW / 2, spriteH / 2 + 10);
   outdoorSprite.pushSprite(screenWidth / 2 + 7, spriteY);
-  outdoorSprite.deleteSprite();
 
   // WiFi im Station Mode starten
   WiFi.mode(WIFI_STA);
@@ -486,6 +476,17 @@ void setup() {
 // ==================== LOOP ====================
 
 void loop() {
+  // Daten-Updates wenn neue Daten empfangen wurden
+  if (indoorNeedsUpdate) {
+    indoorNeedsUpdate = false;
+    drawIndoorSection();
+  }
+
+  if (outdoorNeedsUpdate) {
+    outdoorNeedsUpdate = false;
+    drawOutdoorSection();
+  }
+
   // Regelmäßig Zeit-Updates
   if (millis() - lastTimeUpdate >= TIME_UPDATE_INTERVAL) {
     lastTimeUpdate = millis();
