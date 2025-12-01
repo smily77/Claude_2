@@ -57,6 +57,19 @@ uint8_t receiverMAC[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};  // Broadcast
 // WiFi Kanal für ESP-NOW (1-13, muss mit Empfänger übereinstimmen!)
 #define ESPNOW_CHANNEL 1
 
+// Adaptive Sleep Konfiguration
+#define MIN_SLEEP_PERIOD 20           // Minimum 20 Sekunden
+#define TEMP_CHANGE_FAST 1.0          // >= 1°C: Periode verkürzen
+#define TEMP_CHANGE_STABLE 0.5        // < 0.5°C: Periode verlängern
+#define PERIOD_DIVIDER 3              // Faktor zum Verkürzen/Verlängern
+
+// Standard-Perioden in Sekunden
+#ifdef INDOOR
+  #define DEFAULT_PERIOD 60           // Indoor: 60 Sekunden
+#else
+  #define DEFAULT_PERIOD 900          // Outdoor: 900 Sekunden (15 Min)
+#endif
+
 // I2C Pins für Sensoren
 #define I2C_SDA 0  // GPIO0
 #define I2C_SCL 2  // GPIO2
@@ -80,6 +93,14 @@ typedef struct sensor_data {
   uint8_t sensor_type;       // 0 = Outdoor, 1 = Indoor
 } sensor_data;
 
+// RTC Memory Struktur (überlebt Deep Sleep)
+typedef struct {
+  uint16_t duration;           // Messzeit in ms
+  float last_temperature;      // Letzte Temperatur für Vergleich
+  uint16_t current_period;     // Aktuelle Sleep-Periode in Sekunden
+  uint8_t is_valid;            // 0xAA = Daten gültig
+} rtc_data_t;
+
 // ==================== GLOBALE VARIABLEN ====================
 
 extern "C" {
@@ -93,9 +114,10 @@ SFE_BMP180 bmp180;
 #endif
 
 sensor_data sensorData;
+rtc_data_t rtcData;
 unsigned long startTime;
 int batteryProtector = 1;
-byte rtcStore[2];
+uint16_t sleepPeriod = DEFAULT_PERIOD;  // Aktuelle Sleep-Periode in Sekunden
 
 // ==================== FUNKTIONEN ====================
 
@@ -169,6 +191,102 @@ int readBMP180(double &temp, double &pressure) {
   return 0;  // Erfolg
 }
 
+// RTC Memory laden
+void loadRTCData() {
+  // RTC Daten aus Block 64 lesen (User-Bereich)
+  system_rtc_mem_read(64, (uint32_t*)&rtcData, sizeof(rtcData));
+
+  // Validierung
+  if (rtcData.is_valid != 0xAA) {
+    // Erste Initialisierung oder ungültige Daten
+    rtcData.duration = 0;
+    rtcData.last_temperature = 20.0;  // Annahme: 20°C als Start
+    rtcData.current_period = DEFAULT_PERIOD;
+    rtcData.is_valid = 0xAA;
+
+    if (DEBUG) Serial.println("RTC Data initialized");
+  } else {
+    if (DEBUG) {
+      Serial.print("RTC Data loaded - Last temp: ");
+      Serial.print(rtcData.last_temperature);
+      Serial.print("°C, Period: ");
+      Serial.print(rtcData.current_period);
+      Serial.println("s");
+    }
+  }
+}
+
+// RTC Memory speichern
+void saveRTCData() {
+  rtcData.is_valid = 0xAA;
+  system_rtc_mem_write(64, (uint32_t*)&rtcData, sizeof(rtcData));
+}
+
+// Adaptive Sleep-Periode berechnen
+uint16_t calculateAdaptivePeriod(float current_temp, float last_temp, uint16_t current_period) {
+  // DEBUG Mode: immer 20 Sekunden
+  if (DEBUG) {
+    if (DEBUG) Serial.println("DEBUG Mode: Fixed 20s period");
+    return 20;
+  }
+
+  // Battery Protection Mode: keine Dynamisierung
+  if (batteryProtector > 1) {
+    if (DEBUG) Serial.println("Battery Protection: No adaptation");
+    return DEFAULT_PERIOD;
+  }
+
+  // Temperaturänderung berechnen
+  float temp_change = abs(current_temp - last_temp);
+  uint16_t new_period = current_period;
+
+  if (temp_change >= TEMP_CHANGE_FAST) {
+    // Temperatur ändert sich schnell: Periode verkürzen
+    new_period = current_period / PERIOD_DIVIDER;
+    if (new_period < MIN_SLEEP_PERIOD) {
+      new_period = MIN_SLEEP_PERIOD;
+    }
+
+    if (DEBUG) {
+      Serial.print("Temp change ");
+      Serial.print(temp_change, 2);
+      Serial.print("°C >= ");
+      Serial.print(TEMP_CHANGE_FAST);
+      Serial.print("°C → Period shortened to ");
+      Serial.print(new_period);
+      Serial.println("s");
+    }
+
+  } else if (temp_change < TEMP_CHANGE_STABLE) {
+    // Temperatur stabil: Periode verlängern
+    new_period = current_period * PERIOD_DIVIDER;
+    if (new_period > DEFAULT_PERIOD) {
+      new_period = DEFAULT_PERIOD;
+    }
+
+    if (DEBUG) {
+      Serial.print("Temp change ");
+      Serial.print(temp_change, 2);
+      Serial.print("°C < ");
+      Serial.print(TEMP_CHANGE_STABLE);
+      Serial.print("°C → Period extended to ");
+      Serial.print(new_period);
+      Serial.println("s");
+    }
+
+  } else {
+    if (DEBUG) {
+      Serial.print("Temp change ");
+      Serial.print(temp_change, 2);
+      Serial.print("°C → Period unchanged: ");
+      Serial.print(new_period);
+      Serial.println("s");
+    }
+  }
+
+  return new_period;
+}
+
 // ESP-NOW Send Callback
 void onDataSent(uint8_t *mac_addr, uint8_t sendStatus) {
   if (DEBUG) {
@@ -221,15 +339,14 @@ void setup() {
   rst_info* rinfo = ESP.getResetInfoPtr();
   byte resetReason = rinfo->reason;
 
-  // Duration aus RTC Memory lesen
-  system_rtc_mem_read(28, rtcStore, 2);
-  uint16_t lastDuration = rtcStore[0] * 256 + rtcStore[1];
+  // RTC Memory laden (enthält duration, last_temp, current_period)
+  loadRTCData();
 
   if (DEBUG) {
     Serial.print("Reset reason: ");
     Serial.println(resetReason);
     Serial.print("Last duration: ");
-    Serial.print(lastDuration);
+    Serial.print(rtcData.duration);
     Serial.println(" ms");
   }
 
@@ -287,6 +404,25 @@ void setup() {
     }
   #endif
 
+  // Adaptive Sleep-Periode berechnen
+  sleepPeriod = calculateAdaptivePeriod((float)temp, rtcData.last_temperature, rtcData.current_period);
+
+  if (DEBUG) {
+    Serial.println("\n--- Adaptive Sleep ---");
+    Serial.print("Current temp: ");
+    Serial.print(temp, 2);
+    Serial.print("°C, Last temp: ");
+    Serial.print(rtcData.last_temperature, 2);
+    Serial.println("°C");
+    Serial.print("New sleep period: ");
+    Serial.print(sleepPeriod);
+    Serial.println(" seconds");
+  }
+
+  // Aktuelle Temperatur für nächsten Vergleich speichern
+  rtcData.last_temperature = (float)temp;
+  rtcData.current_period = sleepPeriod;
+
   // Datenstruktur füllen
   sensorData.timestamp = millis();
   sensorData.temperature = (float)temp;
@@ -299,7 +435,7 @@ void setup() {
     sensorData.sensor_type = 0;  // Outdoor
   #endif
   sensorData.battery_voltage = batteryVoltage;
-  sensorData.duration = lastDuration;
+  sensorData.duration = rtcData.duration;
   sensorData.battery_warning = (batteryVoltage < (BATTERY_LIMIT + BATTERY_WARNING_OFFSET)) ? 1 : 0;
   sensorData.sensor_error = sensorError;
   sensorData.reset_reason = resetReason;
@@ -364,34 +500,48 @@ void setup() {
   delay(100);
 
 sleep_now:
-  // Duration speichern
-  uint16_t duration = millis() - startTime;
-  rtcStore[0] = duration / 256;
-  rtcStore[1] = duration % 256;
-  system_rtc_mem_write(28, rtcStore, 2);
+  // Duration speichern in RTC Memory
+  rtcData.duration = millis() - startTime;
+  saveRTCData();
+
+  // Tatsächliche Sleep-Zeit berechnen
+  uint32_t actualSleepTime;
+  if (batteryProtector > 1) {
+    // Battery Protection Mode: Extended Sleep (30 Min)
+    #ifdef INDOOR
+      actualSleepTime = SLEEP_TIME_SECONDS * batteryProtector;
+    #else
+      actualSleepTime = SLEEP_TIME_MINUTES * 60UL * batteryProtector;
+    #endif
+  } else if (DEBUG) {
+    // Debug Mode: 20 Sekunden
+    actualSleepTime = 20;
+  } else {
+    // Normal Mode: Adaptive Periode
+    actualSleepTime = sleepPeriod;
+  }
 
   if (DEBUG) {
     Serial.print("\nTotal duration: ");
-    Serial.print(duration);
+    Serial.print(rtcData.duration);
     Serial.println(" ms");
     Serial.print("Going to sleep for ");
-    #ifdef INDOOR
-      Serial.print(SLEEP_TIME_SECONDS * batteryProtector);
-      Serial.println(" seconds...\n");
-    #else
-      Serial.print(SLEEP_TIME_MINUTES * batteryProtector);
-      Serial.println(" minutes...\n");
-    #endif
+    Serial.print(actualSleepTime);
+    Serial.print(" seconds");
+    if (batteryProtector > 1) {
+      Serial.print(" (Battery Protection)");
+    } else if (DEBUG) {
+      Serial.print(" (Debug Mode)");
+    } else {
+      Serial.print(" (Adaptive)");
+    }
+    Serial.println("...\n");
     delay(100);  // Zeit für Serial Output
   }
 
-  // Deep Sleep
+  // Deep Sleep mit adaptiver Periode
   system_deep_sleep_set_option(WAKE_RFCAL);
-  #ifdef INDOOR
-    system_deep_sleep(SLEEP_TIME_SECONDS * batteryProtector * 1000000UL);
-  #else
-    system_deep_sleep(SLEEP_TIME_MINUTES * 60UL * batteryProtector * 1000000UL);
-  #endif
+  system_deep_sleep(actualSleepTime * 1000000UL);
 
   delay(1000);  // Sollte nie erreicht werden
 }
