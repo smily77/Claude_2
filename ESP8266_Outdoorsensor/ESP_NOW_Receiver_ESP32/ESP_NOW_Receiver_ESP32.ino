@@ -1,8 +1,12 @@
 /*
  * ESP-NOW Empfänger für ESP32-C3
- * Empfängt Daten vom ESP8266 Sensor Node und zeigt sie an
+ * Empfängt Daten von Indoor- und Outdoor-Sensoren
  *
  * Hardware: ESP32-C3 (oder andere ESP32 Varianten)
+ *
+ * Unterstützt:
+ * - Outdoor-Sensor (nur BMP180)
+ * - Indoor-Sensor (BMP180 + AM2321 mit Luftfeuchtigkeit)
  *
  * HINWEIS: ESP32 verwendet eine andere ESP-NOW API als ESP8266!
  */
@@ -17,9 +21,23 @@
 #define ESPNOW_CHANNEL 1
 
 // ==================== DATENSTRUKTUR ====================
-// MUSS identisch mit Sender sein!
+// Universal-Struktur für Indoor und Outdoor
 
-typedef struct sensor_data {
+typedef struct sensor_data_indoor {
+  uint32_t timestamp;
+  float temperature;
+  float pressure;
+  float humidity;           // Nur bei Indoor
+  uint8_t am2321_readings;  // Nur bei Indoor
+  uint16_t battery_voltage;
+  uint16_t duration;
+  uint8_t battery_warning;
+  uint8_t sensor_error;
+  uint8_t reset_reason;
+  uint8_t sensor_type;      // 0=Outdoor, 1=Indoor
+} sensor_data_indoor;
+
+typedef struct sensor_data_outdoor {
   uint32_t timestamp;
   float temperature;
   float pressure;
@@ -28,10 +46,11 @@ typedef struct sensor_data {
   uint8_t battery_warning;
   uint8_t sensor_error;
   uint8_t reset_reason;
-  uint8_t reserved;
-} sensor_data;
+  uint8_t sensor_type;      // 0=Outdoor, 1=Indoor
+} sensor_data_outdoor;
 
-sensor_data receivedData;
+sensor_data_indoor dataIndoor;
+sensor_data_outdoor dataOutdoor;
 unsigned long lastReceiveTime = 0;
 int receivedPackets = 0;
 
@@ -53,65 +72,133 @@ void onDataRecv(const esp_now_recv_info* recv_info, const uint8_t *data, int dat
   }
   Serial.println();
 
-  // Datenprüfung
-  if (data_len != sizeof(receivedData)) {
-    Serial.printf("Warning: Expected %d bytes, received %d bytes\n",
-                  sizeof(receivedData), data_len);
-  }
+  // Sensor-Typ erkennen anhand Datengröße
+  // Outdoor: 20 bytes, Indoor: 25 bytes
+  bool isIndoor = (data_len >= sizeof(sensor_data_indoor));
 
-  // Daten kopieren
-  memcpy(&receivedData, data, min(data_len, (int)sizeof(receivedData)));
+  Serial.print("Data Size: ");
+  Serial.print(data_len);
+  Serial.println(" bytes");
 
-  // Daten anzeigen
-  Serial.println("\n--- Sensor Data ---");
-  Serial.print("Timestamp: ");
-  Serial.print(receivedData.timestamp);
-  Serial.println(" ms");
+  Serial.print("Sensor Type: ");
+  if (isIndoor) {
+    Serial.println("INDOOR (BMP180 + AM2321)");
+    memcpy(&dataIndoor, data, min((int)sizeof(dataIndoor), data_len));
 
-  Serial.print("Temperature: ");
-  Serial.print(receivedData.temperature, 2);
-  Serial.println(" °C");
+    // Daten anzeigen
+    Serial.println("\n--- Sensor Data (Indoor) ---");
+    Serial.print("Timestamp: ");
+    Serial.print(dataIndoor.timestamp);
+    Serial.println(" ms");
 
-  Serial.print("Pressure: ");
-  Serial.print(receivedData.pressure, 2);
-  Serial.println(" mbar");
+    Serial.print("Temperature: ");
+    Serial.print(dataIndoor.temperature, 2);
+    Serial.println(" °C");
 
-  // Höhe über NN schätzen (optional)
-  float altitude = 44330.0 * (1.0 - pow(receivedData.pressure / 1013.25, 0.1903));
-  Serial.print("Estimated Altitude: ");
-  Serial.print(altitude, 1);
-  Serial.println(" m");
+    Serial.print("Humidity: ");
+    Serial.print(dataIndoor.humidity, 1);
+    Serial.println(" %");
 
-  Serial.print("Battery: ");
-  Serial.print(receivedData.battery_voltage);
-  Serial.print(" mV (");
-  Serial.print(receivedData.battery_voltage / 1000.0, 2);
-  Serial.print(" V)");
-  if (receivedData.battery_warning) {
-    Serial.print(" ⚠️  [LOW BATTERY WARNING]");
-  }
-  Serial.println();
+    Serial.print("Pressure: ");
+    Serial.print(dataIndoor.pressure, 2);
+    Serial.println(" mbar");
 
-  Serial.print("Duration: ");
-  Serial.print(receivedData.duration);
-  Serial.println(" ms");
+    // Höhe über NN schätzen
+    float altitude = 44330.0 * (1.0 - pow(dataIndoor.pressure / 1013.25, 0.1903));
+    Serial.print("Estimated Altitude: ");
+    Serial.print(altitude, 1);
+    Serial.println(" m");
 
-  Serial.print("Sensor Status: ");
-  if (receivedData.sensor_error == 0) {
-    Serial.println("OK ✓");
+    Serial.print("AM2321 Readings: ");
+    Serial.println(dataIndoor.am2321_readings);
+
+    Serial.print("Battery: ");
+    Serial.print(dataIndoor.battery_voltage);
+    Serial.print(" mV (");
+    Serial.print(dataIndoor.battery_voltage / 1000.0, 2);
+    Serial.print(" V)");
+    if (dataIndoor.battery_warning) {
+      Serial.print(" ⚠️  [LOW BATTERY!]");
+    }
+    Serial.println();
+
+    Serial.print("Duration: ");
+    Serial.print(dataIndoor.duration);
+    Serial.println(" ms");
+
+    Serial.print("Sensor Status: ");
+    if (dataIndoor.sensor_error == 0) {
+      Serial.println("OK ✓");
+    } else {
+      Serial.printf("ERROR (Code: %d)\n", dataIndoor.sensor_error);
+    }
+
+    Serial.print("Reset Reason: ");
+    switch (dataIndoor.reset_reason) {
+      case 0: Serial.println("Power-on"); break;
+      case 1: Serial.println("Hardware Watchdog"); break;
+      case 2: Serial.println("Software Watchdog"); break;
+      case 3: Serial.println("Software Reset"); break;
+      case 4: Serial.println("Deep Sleep Wake"); break;
+      case 5: Serial.println("External Reset"); break;
+      default: Serial.println("Unknown");
+    }
+
   } else {
-    Serial.printf("ERROR (Code: %d)\n", receivedData.sensor_error);
-  }
+    Serial.println("OUTDOOR (BMP180 only)");
+    memcpy(&dataOutdoor, data, min((int)sizeof(dataOutdoor), data_len));
 
-  Serial.print("Reset Reason: ");
-  switch (receivedData.reset_reason) {
-    case 0: Serial.println("Power-on"); break;
-    case 1: Serial.println("Hardware Watchdog"); break;
-    case 2: Serial.println("Software Watchdog"); break;
-    case 3: Serial.println("Software Reset"); break;
-    case 4: Serial.println("Deep Sleep Wake"); break;
-    case 5: Serial.println("External Reset"); break;
-    default: Serial.println("Unknown");
+    // Daten anzeigen
+    Serial.println("\n--- Sensor Data (Outdoor) ---");
+    Serial.print("Timestamp: ");
+    Serial.print(dataOutdoor.timestamp);
+    Serial.println(" ms");
+
+    Serial.print("Temperature: ");
+    Serial.print(dataOutdoor.temperature, 2);
+    Serial.println(" °C");
+
+    Serial.print("Pressure: ");
+    Serial.print(dataOutdoor.pressure, 2);
+    Serial.println(" mbar");
+
+    // Höhe über NN schätzen
+    float altitude = 44330.0 * (1.0 - pow(dataOutdoor.pressure / 1013.25, 0.1903));
+    Serial.print("Estimated Altitude: ");
+    Serial.print(altitude, 1);
+    Serial.println(" m");
+
+    Serial.print("Battery: ");
+    Serial.print(dataOutdoor.battery_voltage);
+    Serial.print(" mV (");
+    Serial.print(dataOutdoor.battery_voltage / 1000.0, 2);
+    Serial.print(" V)");
+    if (dataOutdoor.battery_warning) {
+      Serial.print(" ⚠️  [LOW BATTERY!]");
+    }
+    Serial.println();
+
+    Serial.print("Duration: ");
+    Serial.print(dataOutdoor.duration);
+    Serial.println(" ms");
+
+    Serial.print("Sensor Status: ");
+    if (dataOutdoor.sensor_error == 0) {
+      Serial.println("OK ✓");
+    } else {
+      Serial.printf("ERROR (Code: %d)\n", dataOutdoor.sensor_error);
+    }
+
+    Serial.print("Reset Reason: ");
+    switch (dataOutdoor.reset_reason) {
+      case 0: Serial.println("Power-on"); break;
+      case 1: Serial.println("Hardware Watchdog"); break;
+      case 2: Serial.println("Software Watchdog"); break;
+      case 3: Serial.println("Software Reset"); break;
+      case 4: Serial.println("Deep Sleep Wake"); break;
+      case 5: Serial.println("External Reset"); break;
+      default: Serial.println("Unknown");
+    }
   }
 
   // RSSI anzeigen (Signalstärke - aus recv_info)
@@ -136,12 +223,14 @@ void onDataRecv(const esp_now_recv_info* recv_info, const uint8_t *data, int dat
   // saveToDatabase(receivedData);
 
   // Beispiel 4: Bedingung prüfen (Alarm bei hoher Temperatur)
-  if (receivedData.temperature > 30.0) {
+  float temp = isIndoor ? dataIndoor.temperature : dataOutdoor.temperature;
+  if (temp > 30.0) {
     Serial.println("⚠️  WARNING: High Temperature!");
   }
 
   // Beispiel 5: Batterie-Warnung
-  if (receivedData.battery_warning) {
+  bool batteryWarning = isIndoor ? dataIndoor.battery_warning : dataOutdoor.battery_warning;
+  if (batteryWarning) {
     Serial.println("⚠️  WARNING: Sensor battery is low!");
     // sendNotification("Sensor battery low!");
   }
@@ -153,9 +242,10 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  Serial.println("\n\n╔═══════════════════════════════════════╗");
-  Serial.println("║  ESP32-C3 ESP-NOW Receiver           ║");
-  Serial.println("╚═══════════════════════════════════════╝\n");
+  Serial.println("\n\n╔════════════════════════════════════════════╗");
+  Serial.println("║  ESP32-C3 ESP-NOW Receiver              ║");
+  Serial.println("║  Supports Indoor & Outdoor Sensors      ║");
+  Serial.println("╚════════════════════════════════════════════╝\n");
 
   // WiFi im Station Mode starten
   WiFi.mode(WIFI_STA);
