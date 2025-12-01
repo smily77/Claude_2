@@ -37,18 +37,18 @@ int receivedPackets = 0;
 
 // ==================== FUNKTIONEN ====================
 
-// ESP-NOW Receive Callback (ESP32 Version)
-void onDataRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len) {
+// ESP-NOW Receive Callback (ESP32 Version - neue API)
+void onDataRecv(const esp_now_recv_info* recv_info, const uint8_t *data, int data_len) {
   receivedPackets++;
 
   Serial.println("\n========================================");
   Serial.printf("Data Received! (Packet #%d)\n", receivedPackets);
   Serial.println("========================================");
 
-  // Sender MAC anzeigen
+  // Sender MAC anzeigen (aus recv_info)
   Serial.print("From MAC: ");
   for (int i = 0; i < 6; i++) {
-    Serial.printf("%02X", mac_addr[i]);
+    Serial.printf("%02X", recv_info->src_addr[i]);
     if (i < 5) Serial.print(":");
   }
   Serial.println();
@@ -114,10 +114,9 @@ void onDataRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len) {
     default: Serial.println("Unknown");
   }
 
-  // RSSI anzeigen (Signalstärke)
-  wifi_pkt_rx_ctrl_t *wifi_pkt_ctrl = (wifi_pkt_rx_ctrl_t *)data;
-  Serial.print("Signal Strength: ");
-  Serial.print(wifi_pkt_ctrl->rssi);
+  // RSSI anzeigen (Signalstärke - aus recv_info)
+  Serial.print("Signal Strength (RSSI): ");
+  Serial.print(recv_info->rx_ctrl->rssi);
   Serial.println(" dBm");
 
   Serial.println("========================================\n");
