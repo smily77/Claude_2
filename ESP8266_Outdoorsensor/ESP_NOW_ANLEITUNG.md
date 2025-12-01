@@ -26,9 +26,15 @@ Dieser Code wurde von ThingSpeak/WiFi auf ESP-NOW umgestellt, um **deutlich weni
 - Läuft dauerhaft und empfängt die Daten
 - Kann dann die Daten weiterverarbeiten (MQTT, Display, Datenbank, etc.)
 
+**Zwei Empfänger-Beispiele verfügbar:**
+- `ESP_NOW_Receiver/` - Für ESP8266 (9600 Baud)
+- `ESP_NOW_Receiver_ESP32/` - Für ESP32-C3 und andere ESP32 (115200 Baud)
+
 ## Installation
 
 ### Arduino IDE Setup
+
+#### Für den Sender (ESP8266):
 
 1. **ESP8266 Board** installieren (falls noch nicht geschehen):
    - Datei → Voreinstellungen
@@ -44,6 +50,20 @@ Dieser Code wurde von ThingSpeak/WiFi auf ESP-NOW umgestellt, um **deutlich weni
    - Flash Size: "1MB (FS:none OTA:~502KB)"
    - CPU Frequency: "80 MHz" (für weniger Stromverbrauch)
    - Upload Speed: "115200"
+
+#### Für den Empfänger (ESP32-C3):
+
+1. **ESP32 Board** installieren (falls noch nicht geschehen):
+   - Datei → Voreinstellungen
+   - Zusätzliche Boardverwalter-URLs: `https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json`
+   - Werkzeuge → Board → Boardverwalter → "esp32" suchen und installieren
+
+2. **Board-Einstellungen für ESP32-C3**:
+   - Board: "ESP32C3 Dev Module"
+   - Upload Speed: "115200"
+   - CPU Frequency: "160 MHz"
+   - Flash Mode: "QIO"
+   - Flash Size: "4MB"
 
 ## Konfiguration
 
@@ -87,7 +107,9 @@ uint8_t receiverMAC[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 **Option B: Spezifische MAC-Adresse** (empfohlen für besten Stromverbrauch)
 
 1. Laden Sie zuerst den **Empfänger-Sketch** auf den Empfänger
-2. Öffnen Sie den Seriellen Monitor (115200 Baud)
+2. Öffnen Sie den Seriellen Monitor:
+   - ESP8266 Empfänger: 9600 Baud
+   - ESP32-C3 Empfänger: 115200 Baud
 3. Die MAC-Adresse wird beim Start angezeigt, z.B.: `AA:BB:CC:DD:EE:FF`
 4. Tragen Sie diese im Sender ein:
    ```cpp
@@ -98,9 +120,16 @@ uint8_t receiverMAC[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 ### 1. Empfänger starten
 
-1. Empfänger-Sketch hochladen
-2. Seriellen Monitor öffnen (115200 Baud)
+**Für ESP8266 Empfänger:**
+1. `ESP_NOW_Receiver.ino` hochladen
+2. Seriellen Monitor öffnen (9600 Baud)
 3. MAC-Adresse notieren
+4. Gerät läuft und wartet auf Daten
+
+**Für ESP32-C3 Empfänger:**
+1. `ESP_NOW_Receiver_ESP32.ino` hochladen
+2. Seriellen Monitor öffnen (115200 Baud)
+3. MAC-Adresse notieren (wird auch im C-Array Format angezeigt!)
 4. Gerät läuft und wartet auf Daten
 
 ### 2. Sender flashen und testen
@@ -270,6 +299,27 @@ display.display();
 - 3: Software Reset
 - 4: Deep Sleep Wake
 - 5: External Reset
+
+### ESP8266 vs ESP32 Empfänger - Unterschiede
+
+| Feature | ESP8266 | ESP32-C3 |
+|---------|---------|----------|
+| Bibliothek | `#include <espnow.h>` | `#include <esp_now.h>` |
+| WiFi Library | `ESP8266WiFi.h` | `WiFi.h` |
+| Baudrate | 9600 | 115200 |
+| API | Älter, einfacher | Neuer, mehr Features |
+| Callback Signatur | `(uint8_t*, uint8_t*, uint8_t)` | `(const uint8_t*, const uint8_t*, int)` |
+| Rollen | CONTROLLER/SLAVE | Keine Rollen |
+| Peer Management | Einfach | Komplexer (peer_info) |
+| Performance | Gut | Besser |
+| RSSI Info | Schwierig | Einfach verfügbar |
+| Preis | Günstiger | Etwas teurer |
+
+**Empfehlung:**
+- **ESP8266** als Empfänger: Wenn Sie schon einen haben oder Kosten sparen möchten
+- **ESP32-C3** als Empfänger: Für bessere Performance, mehr Features und einfacheres RSSI-Monitoring
+
+**WICHTIG:** Der Sender (ESP8266 ESP1) bleibt gleich - nur der Empfänger kann variieren!
 
 ## Lizenz
 
