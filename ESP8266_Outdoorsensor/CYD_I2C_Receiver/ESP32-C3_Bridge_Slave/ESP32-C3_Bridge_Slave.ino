@@ -216,8 +216,39 @@ void setup() {
     Serial.println("===========================================\n");
     Serial.flush();  // Sicherstellen dass alles gesendet wird
 
-    // ========== I2C Bridge initialisieren ==========
-    Serial.println("[INIT] Setting up I2C Bridge...");
+    // ========== WiFi & ESP-NOW ZUERST initialisieren ==========
+    // WICHTIG: WiFi/ESP-NOW vor I2C, da WiFi.mode() Pin-Konfiguration ändern könnte!
+    Serial.println("[INIT] Setting up ESP-NOW...");
+    Serial.flush();
+
+    // WiFi im Station Mode ohne Verbindung
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect();
+
+    // Kanal setzen
+    esp_wifi_set_promiscuous(true);
+    esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
+    esp_wifi_set_promiscuous(false);
+
+    Serial.printf("[WiFi] Channel: %d\n", ESPNOW_CHANNEL);
+    Serial.print("[WiFi] MAC Address: ");
+    Serial.println(WiFi.macAddress());
+
+    // ESP-NOW initialisieren
+    if (esp_now_init() != ESP_OK) {
+        Serial.println("[ERROR] ESP-NOW init failed!");
+        ESP.restart();
+    }
+
+    // Callback registrieren
+    esp_now_register_recv_cb(onDataReceive);
+
+    Serial.println("[ESP-NOW] Initialized and listening");
+    Serial.flush();
+    delay(500);  // Wichtig: WiFi stabilisieren lassen
+
+    // ========== I2C Bridge NACH WiFi initialisieren ==========
+    Serial.println("\n[INIT] Setting up I2C Bridge...");
     Serial.flush();
     delay(100);
 
@@ -238,34 +269,6 @@ void setup() {
     Serial.println("[I2C]  Registered 3 data structures");
     Serial.flush();
     delay(100);
-
-    // ========== WiFi & ESP-NOW initialisieren ==========
-    Serial.println("\n[INIT] Setting up ESP-NOW...");
-    Serial.flush();
-    
-    // WiFi im Station Mode ohne Verbindung
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect();
-    
-    // Kanal setzen
-    esp_wifi_set_promiscuous(true);
-    esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
-    esp_wifi_set_promiscuous(false);
-    
-    Serial.printf("[WiFi] Channel: %d\n", ESPNOW_CHANNEL);
-    Serial.print("[WiFi] MAC Address: ");
-    Serial.println(WiFi.macAddress());
-    
-    // ESP-NOW initialisieren
-    if (esp_now_init() != ESP_OK) {
-        Serial.println("[ERROR] ESP-NOW init failed!");
-        ESP.restart();
-    }
-    
-    // Callback registrieren
-    esp_now_register_recv_cb(onDataReceive);
-    
-    Serial.println("[ESP-NOW] Initialized and listening");
     
     // ========== Initial-Daten ==========
     
