@@ -201,30 +201,24 @@ void setup() {
 
     delay(500);
 
-    // ========== I2C DIREKT initialisieren ==========
-    Serial.println("\n[INIT] Setting up I2C (DIRECT Wire.begin)...");
+    // ========== I2C initialisieren (wie Slave_Alt!) ==========
+    Serial.println("\n[INIT] Setting up I2C (wie ESP32C3_I2C_Slave_Alt)...");
+    Serial.printf("  Initializing as slave at address 0x%02X...\n", I2C_SLAVE_ADDRESS);
 
-    // WICHTIG: Wire.end() aufrufen wegen ESP32-C3 Pre-Initialization!
-    Wire.end();
-    delay(100);
-
-    bool success = Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN, I2C_SLAVE_ADDRESS);
-
-    if (success) {
-        Serial.println("[I2C] ✓ Wire.begin() succeeded");
+    // WICHTIG: Wire.begin() OHNE Pins (wie im funktionierenden Test!)
+    if (Wire.begin((uint8_t)I2C_SLAVE_ADDRESS)) {
+        Serial.println("  ✓ Wire.begin() returned true");
     } else {
-        Serial.println("[I2C] ✗ Wire.begin() failed!");
+        Serial.println("  ✗ Wire.begin() returned false");
     }
 
-    Wire.setBufferSize(I2C_BUFFER_SIZE);
-    Serial.printf("[I2C] Buffer size: %d bytes\n", I2C_BUFFER_SIZE);
-
+    // Callbacks registrieren
     Wire.onReceive(onI2CReceive);
     Wire.onRequest(onI2CRequest);
-    Serial.println("[I2C] ✓ Callbacks registered");
+    Serial.println("  ✓ Callbacks registered");
 
     Serial.printf("[I2C] Slave Address: 0x%02X\n", I2C_SLAVE_ADDRESS);
-    Serial.printf("[I2C] SDA: GPIO %d, SCL: GPIO %d\n", I2C_SDA_PIN, I2C_SCL_PIN);
+    Serial.printf("[I2C] Using default pins: SDA=GPIO %d, SCL=GPIO %d\n", I2C_SDA_PIN, I2C_SCL_PIN);
 
     // Initial-Daten
     memset(&indoorData, 0, sizeof(indoorData));
