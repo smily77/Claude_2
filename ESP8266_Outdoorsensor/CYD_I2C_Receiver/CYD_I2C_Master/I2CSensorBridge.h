@@ -98,15 +98,21 @@ public:
     void beginMaster(int8_t sda = -1, int8_t scl = -1, uint32_t frequency = 100000) {
         isMaster = true;
         deviceAddress = 0;
-        
+
         if (sda >= 0 && scl >= 0) {
-            wireInterface->begin(sda, scl, frequency);
+            wireInterface->begin(sda, scl);
+            wireInterface->setClock(frequency);
         } else {
             wireInterface->begin();
+            wireInterface->setClock(frequency);
         }
-        
+
         #if I2C_BRIDGE_DEBUG
         Serial.println("[I2C Bridge] Master mode initialized");
+        if (sda >= 0 && scl >= 0) {
+            Serial.printf("[I2C Bridge] SDA: GPIO %d, SCL: GPIO %d, Freq: %lu Hz\n",
+                         sda, scl, frequency);
+        }
         #endif
     }
     
@@ -119,22 +125,29 @@ public:
     void beginSlave(uint8_t address, int8_t sda = -1, int8_t scl = -1) {
         isMaster = false;
         deviceAddress = address;
-        
+
         // Singleton setzen für Callbacks
         activeInstance = this;
-        
+
+        // ESP32-C3 benötigt korrekte Pin-Reihenfolge: (sda, scl, address)
         if (sda >= 0 && scl >= 0) {
-            wireInterface->begin(address, sda, scl);
+            wireInterface->begin(sda, scl, address);  // FIX: Korrekte Reihenfolge für ESP32-C3
         } else {
-            wireInterface->begin(address);
+            wireInterface->begin((uint8_t)address);
         }
-        
-        // Callbacks registrieren
+
+        // Buffer-Größe setzen (wichtig für ESP32-C3)
+        wireInterface->setBufferSize(I2C_BRIDGE_BUFFER_SIZE);
+
+        // Callbacks registrieren NACH Wire.begin
         wireInterface->onRequest(onRequestStatic);
         wireInterface->onReceive(onReceiveStatic);
-        
+
         #if I2C_BRIDGE_DEBUG
         Serial.printf("[I2C Bridge] Slave mode initialized on address 0x%02X\n", address);
+        if (sda >= 0 && scl >= 0) {
+            Serial.printf("[I2C Bridge] SDA: GPIO %d, SCL: GPIO %d\n", sda, scl);
+        }
         #endif
     }
     
