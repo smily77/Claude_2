@@ -21,8 +21,8 @@
 
 // I2C
 #define I2C_SLAVE_ADDRESS 0x08
-#define I2C_SDA_PIN 6                 // GEÄNDERT von 8 zu 6 (WiFi-sicher!)
-#define I2C_SCL_PIN 7                 // GEÄNDERT von 9 zu 7 (WiFi-sicher!)
+#define I2C_SDA_PIN 8                 // Zurück zu 8 (funktioniert mit WiFi!)
+#define I2C_SCL_PIN 9                 // Zurück zu 9 (funktioniert mit WiFi!)
 #define I2C_BUFFER_SIZE 128
 
 // ==================== DATENSTRUKTUREN ====================
@@ -203,6 +203,10 @@ void setup() {
 
     // ========== I2C DIREKT initialisieren ==========
     Serial.println("\n[INIT] Setting up I2C (DIRECT Wire.begin)...");
+
+    // WICHTIG: Wire.end() aufrufen wegen ESP32-C3 Pre-Initialization!
+    Wire.end();
+    delay(100);
 
     bool success = Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN, I2C_SLAVE_ADDRESS);
 
