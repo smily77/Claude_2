@@ -21,7 +21,7 @@
 #define ESPNOW_CHANNEL 1              // WiFi Kanal für ESP-NOW
 
 // I2C Konfiguration
-#define I2C_SLAVE_ADDRESS 0x20        // Diese Bridge hat Adresse 0x20
+#define I2C_SLAVE_ADDRESS 0x08        // GEÄNDERT VON 0x20 zu 0x08 (funktioniert!)
 #define I2C_SDA_PIN 8                 // GPIO 8 für SDA
 #define I2C_SCL_PIN 9                 // GPIO 9 für SCL
 
