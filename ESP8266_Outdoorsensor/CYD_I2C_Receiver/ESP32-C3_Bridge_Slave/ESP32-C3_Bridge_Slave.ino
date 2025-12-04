@@ -208,31 +208,40 @@ void updateSystemStatus() {
 // ==================== SETUP ====================
 
 void setup() {
-    #if DEBUG_SERIAL
     Serial.begin(115200);
-    delay(100);
+    delay(2000);  // Längere Wartezeit für Serial
+
     Serial.println("\n\n===========================================");
     Serial.println("     ESP32-C3 I2C Bridge for ESP-NOW");
     Serial.println("===========================================\n");
-    #endif
-    
+    Serial.flush();  // Sicherstellen dass alles gesendet wird
+
     // ========== I2C Bridge initialisieren ==========
     Serial.println("[INIT] Setting up I2C Bridge...");
-    
+    Serial.flush();
+    delay(100);
+
     // Als I2C Slave initialisieren
     i2cBridge.beginSlave(I2C_SLAVE_ADDRESS, I2C_SDA_PIN, I2C_SCL_PIN);
-    
+
+    delay(100);
+    Serial.println("[I2C]  beginSlave() completed");
+    Serial.flush();
+
     // Structs registrieren
     i2cBridge.registerStruct(0x01, &indoorData, 1, "Indoor");
     i2cBridge.registerStruct(0x02, &outdoorData, 1, "Outdoor");
     i2cBridge.registerStruct(0x03, &systemStatus, 1, "Status");
-    
+
     Serial.printf("[I2C]  Slave Address: 0x%02X\n", I2C_SLAVE_ADDRESS);
     Serial.printf("[I2C]  SDA: GPIO %d, SCL: GPIO %d\n", I2C_SDA_PIN, I2C_SCL_PIN);
     Serial.println("[I2C]  Registered 3 data structures");
-    
+    Serial.flush();
+    delay(100);
+
     // ========== WiFi & ESP-NOW initialisieren ==========
     Serial.println("\n[INIT] Setting up ESP-NOW...");
+    Serial.flush();
     
     // WiFi im Station Mode ohne Verbindung
     WiFi.mode(WIFI_STA);
@@ -269,14 +278,14 @@ void setup() {
     
     Serial.println("\n[READY] Bridge is running!");
     Serial.println("========================================\n");
-    
-    #if DEBUG_SERIAL
+    Serial.flush();
+
     // Info-Ausgabe
-    delay(1000);
+    delay(500);
     Serial.println("Waiting for sensor data...");
     Serial.println("Indoor sensor should send every 60 seconds");
     Serial.println("Outdoor sensor should send every 15 minutes\n");
-    #endif
+    Serial.flush();
 }
 
 // ==================== MAIN LOOP ====================

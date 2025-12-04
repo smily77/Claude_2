@@ -18,7 +18,7 @@
 // ==================== KONFIGURATION ====================
 #define I2C_BRIDGE_MAX_STRUCTS 8        // Max Anzahl Structs pro Device
 #define I2C_BRIDGE_BUFFER_SIZE 128       // Max Größe eines Structs
-#define I2C_BRIDGE_DEBUG 0               // Debug-Ausgaben (0=aus, 1=an)
+#define I2C_BRIDGE_DEBUG 1               // Debug-Ausgaben (0=aus, 1=an) - AKTIVIERT für Debugging!
 
 // I2C Kommando-Bytes
 #define CMD_GET_STATUS      0x01  // Status-Byte abfragen (welche Structs sind neu)
