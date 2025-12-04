@@ -21,8 +21,8 @@
 
 // I2C
 #define I2C_SLAVE_ADDRESS 0x08
-#define I2C_SDA_PIN 8
-#define I2C_SCL_PIN 9
+#define I2C_SDA_PIN 6                 // GEÄNDERT von 8 zu 6 (WiFi-sicher!)
+#define I2C_SCL_PIN 7                 // GEÄNDERT von 9 zu 7 (WiFi-sicher!)
 #define I2C_BUFFER_SIZE 128
 
 // ==================== DATENSTRUKTUREN ====================
