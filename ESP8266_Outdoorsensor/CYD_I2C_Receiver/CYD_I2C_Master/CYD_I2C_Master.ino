@@ -233,7 +233,7 @@ void drawIndoorSection() {
     indoorSprite.setTextColor(COLOR_TEMP);
     indoorSprite.setTextDatum(middle_center);
     char tempStr[16];
-    snprintf(tempStr, sizeof(tempStr), "%.1f°C", indoorData.temperature);
+    snprintf(tempStr, sizeof(tempStr), "%.1f C", indoorData.temperature);
     indoorSprite.drawString(tempStr, centerX, contentY);
     contentY += lineHeight;
     
@@ -305,7 +305,7 @@ void drawOutdoorSection() {
     outdoorSprite.setTextColor(COLOR_TEMP);
     outdoorSprite.setTextDatum(middle_center);
     char tempStr[16];
-    snprintf(tempStr, sizeof(tempStr), "%.1f°C", outdoorData.temperature);
+    snprintf(tempStr, sizeof(tempStr), "%.1f C", outdoorData.temperature);
     outdoorSprite.drawString(tempStr, centerX, contentY);
     contentY += lineHeight;
     
