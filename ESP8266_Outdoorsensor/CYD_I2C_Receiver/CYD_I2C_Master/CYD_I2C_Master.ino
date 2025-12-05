@@ -151,35 +151,41 @@ void drawHeader() {
         uint8_t blue = 31 - (y * 31 / headerHeight);
         lcd.drawFastHLine(0, y, screenWidth, lcd.color565(0, 0, blue * 8));
     }
-    
-    // Titel
-    lcd.setFont(is480p ? &fonts::FreeSansBold18pt7b : &fonts::FreeSansBold12pt7b);
-    lcd.setTextColor(COLOR_TEXT);
-    lcd.setTextDatum(top_center);
-    //lcd.drawString("I2C Sensor Monitor", screenWidth / 2, is480p ? 10 : 5);
-    
-    // WiFi & Zeit Status (rechts oben)
+
+    // Monatsnamen für deutsches Datum
+    const char* monate[] = {"Jan.", "Feb.", "Mrz.", "Apr.", "Mai", "Jun.",
+                            "Jul.", "Aug.", "Sep.", "Okt.", "Nov.", "Dez."};
+
+    // Zeit & Datum auf einer Zeile, zentriert
+    if (wifiConnected && timeConfigured) {
+        struct tm timeinfo;
+        if (getLocalTime(&timeinfo)) {
+            lcd.setFont(is480p ? &fonts::FreeSansBold18pt7b : &fonts::FreeSansBold12pt7b);
+            lcd.setTextColor(COLOR_TEXT);
+            lcd.setTextDatum(top_center);
+
+            char timeStr[6];
+            strftime(timeStr, sizeof(timeStr), "%H:%M", &timeinfo);
+
+            char timeDateStr[32];
+            snprintf(timeDateStr, sizeof(timeDateStr), "%s  %d. %s", timeStr, timeinfo.tm_mday, monate[timeinfo.tm_mon]);
+
+            lcd.drawString(timeDateStr, screenWidth / 2, is480p ? 10 : 7);
+        }
+    }
+
+    // WiFi Status (rechts oben)
     lcd.setFont(&fonts::Font2);
     lcd.setTextDatum(top_right);
-    
+
     if (wifiConnected) {
         lcd.setTextColor(COLOR_RSSI_GOOD);
         lcd.drawString("WiFi", screenWidth - 5, 5);
-        
-        if (timeConfigured) {
-            struct tm timeinfo;
-            if (getLocalTime(&timeinfo)) {
-                char timeStr[6];
-                strftime(timeStr, sizeof(timeStr), "%H:%M", &timeinfo);
-                lcd.setTextColor(COLOR_TEXT);
-                lcd.drawString(timeStr, screenWidth - 40, 5);
-            }
-        }
     } else {
         lcd.setTextColor(COLOR_RSSI_POOR);
         lcd.drawString("No WiFi", screenWidth - 5, 5);
     }
-    
+
     // I2C Bridge Status (links oben)
     lcd.setTextDatum(top_left);
     if (systemStatus.esp_now_packets > 0) {
