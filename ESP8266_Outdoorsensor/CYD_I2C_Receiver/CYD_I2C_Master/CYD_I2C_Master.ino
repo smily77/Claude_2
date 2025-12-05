@@ -168,8 +168,9 @@ void drawHeader() {
             strftime(timeStr, sizeof(timeStr), "%H:%M", &timeinfo);
             lcd.drawString(timeStr, screenWidth / 2, is480p ? 5 : 2);
 
-            // Datum (Format: "23. Dez.")
+            // Datum (Format: "23. Dez.") - exakt mittig unter der Zeit
             lcd.setFont(&fonts::Font2);
+            lcd.setTextDatum(top_center);  // Explizit zentriert
             char dateStr[16];
             snprintf(dateStr, sizeof(dateStr), "%d. %s", timeinfo.tm_mday, monate[timeinfo.tm_mon]);
             lcd.drawString(dateStr, screenWidth / 2, is480p ? 32 : 22);
