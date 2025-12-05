@@ -156,25 +156,21 @@ void drawHeader() {
     const char* monate[] = {"Jan.", "Feb.", "Mrz.", "Apr.", "Mai", "Jun.",
                             "Jul.", "Aug.", "Sep.", "Okt.", "Nov.", "Dez."};
 
-    // Zeit & Datum zentriert
+    // Zeit & Datum auf einer Zeile, zentriert
     if (wifiConnected && timeConfigured) {
         struct tm timeinfo;
         if (getLocalTime(&timeinfo)) {
-            // Zeit (größer)
             lcd.setFont(is480p ? &fonts::FreeSansBold18pt7b : &fonts::FreeSansBold12pt7b);
             lcd.setTextColor(COLOR_TEXT);
             lcd.setTextDatum(top_center);
+
             char timeStr[6];
             strftime(timeStr, sizeof(timeStr), "%H:%M", &timeinfo);
-            lcd.drawString(timeStr, screenWidth / 2, is480p ? 8 : 4);
 
-            // Datum (Format: "23. Dez.") - exakt mittig unter der Zeit
-            lcd.setFont(&fonts::Font2);
-            lcd.setTextColor(COLOR_TEXT);  // Explizit Textfarbe setzen
-            lcd.setTextDatum(top_center);
-            char dateStr[16];
-            snprintf(dateStr, sizeof(dateStr), "%d. %s", timeinfo.tm_mday, monate[timeinfo.tm_mon]);
-            lcd.drawString(dateStr, screenWidth / 2, is480p ? 35 : 24);
+            char timeDateStr[32];
+            snprintf(timeDateStr, sizeof(timeDateStr), "%s  %d. %s", timeStr, timeinfo.tm_mday, monate[timeinfo.tm_mon]);
+
+            lcd.drawString(timeDateStr, screenWidth / 2, is480p ? 10 : 7);
         }
     }
 
