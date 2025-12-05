@@ -14,8 +14,10 @@ Dieses System verwendet einen **ESP32-C3** als Bridge zwischen ESP-NOW Sensoren 
 
 **Warum ESP32-C3 als Bridge?**
 - CYD benötigt WiFi für NTP (Zeitanzeige)
-- ESP-NOW und WiFi können nicht auf dem gleichen ESP32 koexistieren
-- ESP32-C3 empfängt ESP-NOW Daten und stellt sie via I2C bereit
+- ESP-NOW und WiFi KÖNNEN koexistieren, aber nur auf dem **gleichen WiFi-Kanal**
+- Problem: WiFi-Router bestimmt den Kanal, ESP-NOW Sensoren müssten sich anpassen
+- Sensor-Lösung wäre unpraktisch: WiFi Station Mode würde Strom-Verbrauch vervielfachen
+- ESP32-C3 Bridge ist die energieeffiziente Lösung: Sensoren bleiben im ESP-NOW Only Mode
 
 ## Hardware Setup
 
@@ -329,6 +331,8 @@ if (systemStatus.outdoor_last_seen > 1200) {  // 20 Minuten
 
 - [Arduino ESP32 I2C Documentation](https://docs.espressif.com/projects/arduino-esp32/en/latest/api/i2c.html)
 - [Stack Overflow: ESP32-C3 I2C Pre-Initialization](https://stackoverflow.com/questions/77020126/arduino-ide-esp32-c3-hidden-i2c-initialisation-hidden-wire-begin)
+- [ThingPulse: ESP-NOW and WiFi Simultaneously](https://thingpulse.com/esp32-espnow-wifi-simultaneous-communication/)
+- [Random Nerd Tutorials: ESP-NOW and Wi-Fi Web Server](https://randomnerdtutorials.com/esp32-esp-now-wi-fi-web-server/)
 
 ## Fazit
 
