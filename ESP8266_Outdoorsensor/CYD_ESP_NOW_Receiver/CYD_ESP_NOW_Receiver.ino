@@ -67,6 +67,7 @@ typedef struct sensor_data_indoor {
   uint8_t sensor_error;
   uint8_t reset_reason;
   uint8_t sensor_type;
+  uint16_t sleep_time_sec;
 } sensor_data_indoor;
 
 typedef struct sensor_data_outdoor {
@@ -79,6 +80,7 @@ typedef struct sensor_data_outdoor {
   uint8_t sensor_error;
   uint8_t reset_reason;
   uint8_t sensor_type;
+  uint16_t sleep_time_sec;
 } sensor_data_outdoor;
 
 // ==================== GLOBALE VARIABLEN ====================

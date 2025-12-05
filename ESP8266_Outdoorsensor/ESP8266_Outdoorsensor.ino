@@ -91,6 +91,7 @@ typedef struct sensor_data {
   uint8_t sensor_error;      // 0 = OK, >0 = Fehlercode
   uint8_t reset_reason;      // Grund für letzten Reset
   uint8_t sensor_type;       // 0 = Outdoor, 1 = Indoor
+  uint16_t sleep_time_sec;   // Aktuelle Sleep-Periode in Sekunden
 } sensor_data;
 
 // RTC Memory Struktur (überlebt Deep Sleep)
@@ -439,6 +440,7 @@ void setup() {
   sensorData.battery_warning = (batteryVoltage < (BATTERY_LIMIT + BATTERY_WARNING_OFFSET)) ? 1 : 0;
   sensorData.sensor_error = sensorError;
   sensorData.reset_reason = resetReason;
+  sensorData.sleep_time_sec = sleepPeriod;  // Aktuelle Sleep-Periode für dynamische Timeouts
 
   // WiFi im Station Mode starten (erforderlich für ESP-NOW)
   WiFi.mode(WIFI_STA);

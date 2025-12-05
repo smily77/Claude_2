@@ -35,6 +35,7 @@ typedef struct sensor_data_indoor {
   uint8_t sensor_error;
   uint8_t reset_reason;
   uint8_t sensor_type;      // 0=Outdoor, 1=Indoor
+  uint16_t sleep_time_sec;  // Sleep-Periode in Sekunden
 } sensor_data_indoor;
 
 typedef struct sensor_data_outdoor {
@@ -47,6 +48,7 @@ typedef struct sensor_data_outdoor {
   uint8_t sensor_error;
   uint8_t reset_reason;
   uint8_t sensor_type;      // 0=Outdoor, 1=Indoor
+  uint16_t sleep_time_sec;  // Sleep-Periode in Sekunden
 } sensor_data_outdoor;
 
 sensor_data_indoor dataIndoor;
@@ -144,6 +146,10 @@ void onDataRecv(const esp_now_recv_info* recv_info, const uint8_t *data, int dat
       default: Serial.println("Unknown");
     }
 
+    Serial.print("Sleep Time: ");
+    Serial.print(dataIndoor.sleep_time_sec);
+    Serial.println(" sec");
+
   } else {
     Serial.println("OUTDOOR (BMP180 only)");
     memcpy(&dataOutdoor, data, min((int)sizeof(dataOutdoor), data_len));
@@ -199,6 +205,10 @@ void onDataRecv(const esp_now_recv_info* recv_info, const uint8_t *data, int dat
       case 5: Serial.println("External Reset"); break;
       default: Serial.println("Unknown");
     }
+
+    Serial.print("Sleep Time: ");
+    Serial.print(dataOutdoor.sleep_time_sec);
+    Serial.println(" sec");
   }
 
   // RSSI anzeigen (Signalstärke - aus recv_info)

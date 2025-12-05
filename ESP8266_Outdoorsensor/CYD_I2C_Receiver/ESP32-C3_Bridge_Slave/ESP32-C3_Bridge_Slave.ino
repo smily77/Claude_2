@@ -39,9 +39,10 @@ struct IndoorData {
     uint32_t timestamp;    // ms
     int8_t rssi;          // dBm
     bool battery_warning;
+    uint16_t sleep_time_sec; // Sleep-Periode in Sekunden
 } __attribute__((packed));
 
-// Outdoor Sensor Daten (ohne Luftfeuchtigkeit)  
+// Outdoor Sensor Daten (ohne Luftfeuchtigkeit)
 struct OutdoorData {
     float temperature;      // °C
     float pressure;        // mbar
@@ -49,6 +50,7 @@ struct OutdoorData {
     uint32_t timestamp;    // ms
     int8_t rssi;          // dBm
     bool battery_warning;
+    uint16_t sleep_time_sec; // Sleep-Periode in Sekunden
 } __attribute__((packed));
 
 // System Status (optional)
@@ -76,6 +78,7 @@ typedef struct sensor_data_indoor_raw {
     uint8_t sensor_error;
     uint8_t reset_reason;
     uint8_t sensor_type;
+    uint16_t sleep_time_sec;
 } sensor_data_indoor_raw;
 
 typedef struct sensor_data_outdoor_raw {
@@ -88,6 +91,7 @@ typedef struct sensor_data_outdoor_raw {
     uint8_t sensor_error;
     uint8_t reset_reason;
     uint8_t sensor_type;
+    uint16_t sleep_time_sec;
 } sensor_data_outdoor_raw;
 
 // ==================== GLOBALE VARIABLEN ====================
@@ -136,6 +140,7 @@ void onDataReceive(const esp_now_recv_info* recv_info, const uint8_t* data, int 
         indoorData.timestamp = millis();
         indoorData.rssi = recv_info->rx_ctrl->rssi;
         indoorData.battery_warning = raw.battery_warning;
+        indoorData.sleep_time_sec = raw.sleep_time_sec;
         
         // Via I2C Bridge aktualisieren
         i2cBridge.updateStruct(0x01, indoorData);
@@ -161,6 +166,7 @@ void onDataReceive(const esp_now_recv_info* recv_info, const uint8_t* data, int 
         outdoorData.timestamp = millis();
         outdoorData.rssi = recv_info->rx_ctrl->rssi;
         outdoorData.battery_warning = raw.battery_warning;
+        outdoorData.sleep_time_sec = raw.sleep_time_sec;
         
         // Via I2C Bridge aktualisieren
         i2cBridge.updateStruct(0x02, outdoorData);
@@ -190,13 +196,15 @@ void updateSystemStatus() {
     systemStatus.outdoor_last_seen = (lastOutdoorReceived > 0) ? 
                                      (now - lastOutdoorReceived) / 1000 : 999999;
     
-    // Aktiv-Status basierend auf Sende-Intervall
-    // Indoor: alle 60 Sekunden → Timeout 5 Minuten
-    // Outdoor: alle 15 Minuten → Timeout 20 Minuten
-    if (systemStatus.indoor_last_seen > 300) {  // 5 Minuten
+    // Aktiv-Status basierend auf dynamischem Timeout (2.1 × Sleep-Zeit)
+    // Sensor teilt seine Sleep-Zeit mit → Timeout passt sich automatisch an
+    uint16_t indoor_timeout = indoorData.sleep_time_sec * 2.1;
+    uint16_t outdoor_timeout = outdoorData.sleep_time_sec * 2.1;
+
+    if (systemStatus.indoor_last_seen > indoor_timeout) {
         systemStatus.indoor_active = 0;
     }
-    if (systemStatus.outdoor_last_seen > 1200) {  // 20 Minuten (statt 5)
+    if (systemStatus.outdoor_last_seen > outdoor_timeout) {
         systemStatus.outdoor_active = 0;
     }
     
