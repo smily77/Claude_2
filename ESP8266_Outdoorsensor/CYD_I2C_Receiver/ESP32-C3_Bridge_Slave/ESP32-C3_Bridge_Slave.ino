@@ -21,9 +21,9 @@
 #define ESPNOW_CHANNEL 1              // WiFi Kanal für ESP-NOW
 
 // I2C Konfiguration
-#define I2C_SLAVE_ADDRESS 0x20        // Diese Bridge hat Adresse 0x20
-#define I2C_SDA_PIN 8                 // GPIO 8 für SDA
-#define I2C_SCL_PIN 9                 // GPIO 9 für SCL
+#define I2C_SLAVE_ADDRESS 0x20        // Zurück zu 0x20
+#define I2C_SDA_PIN 8                 // GPIO 8 für SDA (nur für Info)
+#define I2C_SCL_PIN 9                 // GPIO 9 für SCL (nur für Info)
 
 // Debug-Ausgaben
 #define DEBUG_SERIAL 1                // Serielle Debug-Ausgaben
@@ -190,11 +190,13 @@ void updateSystemStatus() {
     systemStatus.outdoor_last_seen = (lastOutdoorReceived > 0) ? 
                                      (now - lastOutdoorReceived) / 1000 : 999999;
     
-    // Aktiv-Status (wenn länger als 5 Minuten nichts empfangen)
-    if (systemStatus.indoor_last_seen > 300) {
+    // Aktiv-Status basierend auf Sende-Intervall
+    // Indoor: alle 60 Sekunden → Timeout 5 Minuten
+    // Outdoor: alle 15 Minuten → Timeout 20 Minuten
+    if (systemStatus.indoor_last_seen > 300) {  // 5 Minuten
         systemStatus.indoor_active = 0;
     }
-    if (systemStatus.outdoor_last_seen > 300) {
+    if (systemStatus.outdoor_last_seen > 1200) {  // 20 Minuten (statt 5)
         systemStatus.outdoor_active = 0;
     }
     
@@ -208,55 +210,67 @@ void updateSystemStatus() {
 // ==================== SETUP ====================
 
 void setup() {
-    #if DEBUG_SERIAL
     Serial.begin(115200);
-    delay(100);
+    delay(2000);  // Längere Wartezeit für Serial
+
     Serial.println("\n\n===========================================");
     Serial.println("     ESP32-C3 I2C Bridge for ESP-NOW");
     Serial.println("===========================================\n");
-    #endif
-    
-    // ========== I2C Bridge initialisieren ==========
-    Serial.println("[INIT] Setting up I2C Bridge...");
-    
-    // Als I2C Slave initialisieren
-    i2cBridge.beginSlave(I2C_SLAVE_ADDRESS, I2C_SDA_PIN, I2C_SCL_PIN);
-    
-    // Structs registrieren
-    i2cBridge.registerStruct(0x01, &indoorData, 1, "Indoor");
-    i2cBridge.registerStruct(0x02, &outdoorData, 1, "Outdoor");
-    i2cBridge.registerStruct(0x03, &systemStatus, 1, "Status");
-    
-    Serial.printf("[I2C]  Slave Address: 0x%02X\n", I2C_SLAVE_ADDRESS);
-    Serial.printf("[I2C]  SDA: GPIO %d, SCL: GPIO %d\n", I2C_SDA_PIN, I2C_SCL_PIN);
-    Serial.println("[I2C]  Registered 3 data structures");
-    
-    // ========== WiFi & ESP-NOW initialisieren ==========
-    Serial.println("\n[INIT] Setting up ESP-NOW...");
-    
+    Serial.flush();  // Sicherstellen dass alles gesendet wird
+
+    // ========== WiFi & ESP-NOW ZUERST initialisieren ==========
+    // WICHTIG: WiFi/ESP-NOW vor I2C, da WiFi.mode() Pin-Konfiguration ändern könnte!
+    Serial.println("[INIT] Setting up ESP-NOW...");
+    Serial.flush();
+
     // WiFi im Station Mode ohne Verbindung
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
-    
+
     // Kanal setzen
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
     esp_wifi_set_promiscuous(false);
-    
+
     Serial.printf("[WiFi] Channel: %d\n", ESPNOW_CHANNEL);
     Serial.print("[WiFi] MAC Address: ");
     Serial.println(WiFi.macAddress());
-    
+
     // ESP-NOW initialisieren
     if (esp_now_init() != ESP_OK) {
         Serial.println("[ERROR] ESP-NOW init failed!");
         ESP.restart();
     }
-    
+
     // Callback registrieren
     esp_now_register_recv_cb(onDataReceive);
-    
+
     Serial.println("[ESP-NOW] Initialized and listening");
+    Serial.flush();
+    delay(500);  // Wichtig: WiFi stabilisieren lassen
+
+    // ========== I2C Bridge NACH WiFi initialisieren ==========
+    Serial.println("\n[INIT] Setting up I2C Bridge...");
+    Serial.flush();
+    delay(100);
+
+    // Als I2C Slave initialisieren (OHNE Pins - wie im funktionierenden Test!)
+    i2cBridge.beginSlave(I2C_SLAVE_ADDRESS);
+
+    delay(100);
+    Serial.println("[I2C]  beginSlave() completed");
+    Serial.flush();
+
+    // Structs registrieren
+    i2cBridge.registerStruct(0x01, &indoorData, 1, "Indoor");
+    i2cBridge.registerStruct(0x02, &outdoorData, 1, "Outdoor");
+    i2cBridge.registerStruct(0x03, &systemStatus, 1, "Status");
+
+    Serial.printf("[I2C]  Slave Address: 0x%02X\n", I2C_SLAVE_ADDRESS);
+    Serial.printf("[I2C]  SDA: GPIO %d, SCL: GPIO %d\n", I2C_SDA_PIN, I2C_SCL_PIN);
+    Serial.println("[I2C]  Registered 3 data structures");
+    Serial.flush();
+    delay(100);
     
     // ========== Initial-Daten ==========
     
@@ -269,14 +283,14 @@ void setup() {
     
     Serial.println("\n[READY] Bridge is running!");
     Serial.println("========================================\n");
-    
-    #if DEBUG_SERIAL
+    Serial.flush();
+
     // Info-Ausgabe
-    delay(1000);
+    delay(500);
     Serial.println("Waiting for sensor data...");
     Serial.println("Indoor sensor should send every 60 seconds");
     Serial.println("Outdoor sensor should send every 15 minutes\n");
-    #endif
+    Serial.flush();
 }
 
 // ==================== MAIN LOOP ====================
