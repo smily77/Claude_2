@@ -166,14 +166,15 @@ void drawHeader() {
             lcd.setTextDatum(top_center);
             char timeStr[6];
             strftime(timeStr, sizeof(timeStr), "%H:%M", &timeinfo);
-            lcd.drawString(timeStr, screenWidth / 2, is480p ? 5 : 2);
+            lcd.drawString(timeStr, screenWidth / 2, is480p ? 8 : 4);
 
             // Datum (Format: "23. Dez.") - exakt mittig unter der Zeit
             lcd.setFont(&fonts::Font2);
-            lcd.setTextDatum(top_center);  // Explizit zentriert
+            lcd.setTextColor(COLOR_TEXT);  // Explizit Textfarbe setzen
+            lcd.setTextDatum(top_center);
             char dateStr[16];
             snprintf(dateStr, sizeof(dateStr), "%d. %s", timeinfo.tm_mday, monate[timeinfo.tm_mon]);
-            lcd.drawString(dateStr, screenWidth / 2, is480p ? 32 : 22);
+            lcd.drawString(dateStr, screenWidth / 2, is480p ? 35 : 24);
         }
     }
 
