@@ -21,9 +21,9 @@
 #define ESPNOW_CHANNEL 1              // WiFi Kanal für ESP-NOW
 
 // I2C Konfiguration
-#define I2C_SLAVE_ADDRESS 0x08        // GEÄNDERT VON 0x20 zu 0x08 (funktioniert!)
-#define I2C_SDA_PIN 8                 // GPIO 8 für SDA
-#define I2C_SCL_PIN 9                 // GPIO 9 für SCL
+#define I2C_SLAVE_ADDRESS 0x20        // Zurück zu 0x20
+#define I2C_SDA_PIN 8                 // GPIO 8 für SDA (nur für Info)
+#define I2C_SCL_PIN 9                 // GPIO 9 für SCL (nur für Info)
 
 // Debug-Ausgaben
 #define DEBUG_SERIAL 1                // Serielle Debug-Ausgaben
@@ -252,8 +252,8 @@ void setup() {
     Serial.flush();
     delay(100);
 
-    // Als I2C Slave initialisieren
-    i2cBridge.beginSlave(I2C_SLAVE_ADDRESS, I2C_SDA_PIN, I2C_SCL_PIN);
+    // Als I2C Slave initialisieren (OHNE Pins - wie im funktionierenden Test!)
+    i2cBridge.beginSlave(I2C_SLAVE_ADDRESS);
 
     delay(100);
     Serial.println("[I2C]  beginSlave() completed");

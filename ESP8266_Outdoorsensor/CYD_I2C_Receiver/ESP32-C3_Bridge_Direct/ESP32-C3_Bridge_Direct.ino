@@ -20,9 +20,9 @@
 #define ESPNOW_CHANNEL 1
 
 // I2C
-#define I2C_SLAVE_ADDRESS 0x08
-#define I2C_SDA_PIN 8                 // Zurück zu 8 (funktioniert mit WiFi!)
-#define I2C_SCL_PIN 9                 // Zurück zu 9 (funktioniert mit WiFi!)
+#define I2C_SLAVE_ADDRESS 0x20        // Zurück zu 0x20
+#define I2C_SDA_PIN 8                 // Default GPIO 8 für SDA
+#define I2C_SCL_PIN 9                 // Default GPIO 9 für SCL
 #define I2C_BUFFER_SIZE 128
 
 // ==================== DATENSTRUKTUREN ====================

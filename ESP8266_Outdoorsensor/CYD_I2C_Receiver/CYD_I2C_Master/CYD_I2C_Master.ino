@@ -31,7 +31,7 @@
 #define I2C_FREQUENCY 100000           // 100 kHz Standard
 
 // Bridge I2C Adressen
-#define BRIDGE_ADDRESS_1 0x08          // GEÄNDERT VON 0x20 zu 0x08 (funktioniert!)
+#define BRIDGE_ADDRESS_1 0x20          // Bridge Adresse (ESP32-C3)
 // #define BRIDGE_ADDRESS_2 0x21       // Zweite Bridge (falls vorhanden)
 
 // WiFi Konfiguration (optional für NTP)
