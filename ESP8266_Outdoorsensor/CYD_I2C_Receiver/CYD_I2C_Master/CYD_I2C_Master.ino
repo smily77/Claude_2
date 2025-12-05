@@ -6,8 +6,8 @@
  * Kann gleichzeitig WiFi für NTP nutzen
  * 
  * Hardware:
- * - CYD (ESP32-S3 mit Display)
- * - I2C: GPIO 43 (SDA), GPIO 44 (SCL) - sichere Pins beim N16R8!
+ * - CYD gmäss CYD_Display_Config.h
+ * - I2C: extSDA Pin 22, extSDA Pin 27 soweit in der CYD_Display_Config.h nicht anderst definiert
  * - Pull-up Widerstände 4.7k an SDA/SCL
  */
 
@@ -224,7 +224,7 @@ void drawIndoorSection() {
         return;
     }
     
-    int contentY = 15;
+    int contentY = 17;
     int lineHeight = is480p ? 35 : 28;
     int centerX = spriteW / 2;
     
@@ -296,7 +296,7 @@ void drawOutdoorSection() {
         return;
     }
     
-    int contentY = 15;
+    int contentY = 17;
     int lineHeight = is480p ? 35 : 28;
     int centerX = spriteW / 2;
     
