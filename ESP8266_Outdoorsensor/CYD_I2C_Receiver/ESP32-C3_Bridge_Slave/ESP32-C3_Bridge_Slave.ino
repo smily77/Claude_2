@@ -190,11 +190,13 @@ void updateSystemStatus() {
     systemStatus.outdoor_last_seen = (lastOutdoorReceived > 0) ? 
                                      (now - lastOutdoorReceived) / 1000 : 999999;
     
-    // Aktiv-Status (wenn länger als 5 Minuten nichts empfangen)
-    if (systemStatus.indoor_last_seen > 300) {
+    // Aktiv-Status basierend auf Sende-Intervall
+    // Indoor: alle 60 Sekunden → Timeout 5 Minuten
+    // Outdoor: alle 15 Minuten → Timeout 20 Minuten
+    if (systemStatus.indoor_last_seen > 300) {  // 5 Minuten
         systemStatus.indoor_active = 0;
     }
-    if (systemStatus.outdoor_last_seen > 300) {
+    if (systemStatus.outdoor_last_seen > 1200) {  // 20 Minuten (statt 5)
         systemStatus.outdoor_active = 0;
     }
     
