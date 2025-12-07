@@ -222,28 +222,32 @@ void drawIndoorSection() {
   }
 
   // Inhalt in Sprite zeichnen
-  int contentY = 15;
+  int contentY = 17;
   int lineHeight = is480p ? 35 : 28;
   int centerX = spriteW / 2;
+  unsigned long secondsAgo = (millis() - lastIndoorReceive) / 1000;
+  bool dataValid (secondsAgo <= (2.1 * indoorData.sleep_time_sec));
 
   // Temperatur mit Gradzeichen
   indoorSprite.setFont(is480p ? &fonts::FreeSansBold24pt7b : &fonts::FreeSansBold18pt7b);
   indoorSprite.setTextColor(COLOR_TEMP);
   indoorSprite.setTextDatum(middle_center);
   char tempStr[16];
-  snprintf(tempStr, sizeof(tempStr), "%.1f%cC", indoorData.temperature, 32);
-  indoorSprite.drawString(tempStr, centerX, contentY);
+  if (dataValid) {
+    snprintf(tempStr, sizeof(tempStr), "%.1f%cC", indoorData.temperature, 32);
+    indoorSprite.drawString(tempStr, centerX, contentY);
+  }
   contentY += lineHeight;
 
   // Luftfeuchtigkeit
   indoorSprite.setFont(is480p ? &fonts::FreeSansBold12pt7b : &fonts::FreeSans9pt7b);
   indoorSprite.setTextColor(COLOR_HUM);
-  indoorSprite.drawString(String(indoorData.humidity, 0) + "%", centerX, contentY);
+  if (dataValid) indoorSprite.drawString(String(indoorData.humidity, 0) + "%", centerX, contentY);
   contentY += lineHeight - 5;
 
   // Luftdruck
   indoorSprite.setTextColor(COLOR_PRESS);
-  indoorSprite.drawString(String(indoorData.pressure, 0) + " mbar", centerX, contentY);
+  if (dataValid) indoorSprite.drawString(String(indoorData.pressure, 0) + " mbar", centerX, contentY);
   contentY += lineHeight;
 
   // Batterie
@@ -267,7 +271,7 @@ void drawIndoorSection() {
   contentY += lineHeight -12;
 
   // Letzter Empfang
-  unsigned long secondsAgo = (millis() - lastIndoorReceive) / 1000;
+  
   //indoorSprite.setFont(&fonts::FreeSans9pt7b);
   indoorSprite.setFont(&fonts::Font2);
   indoorSprite.setTextColor(COLOR_TEXT_DIM);
@@ -308,17 +312,21 @@ void drawOutdoorSection() {
   }
 
   // Inhalt in Sprite zeichnen
-  int contentY = 15;
+  int contentY = 17;
   int lineHeight = is480p ? 35 : 28;
   int centerX = spriteW / 2;
+  unsigned long secondsAgo = (millis() - lastOutdoorReceive) / 1000;
+  bool dataValid (secondsAgo <= (2.1 * outdoorData.sleep_time_sec));
 
   // Temperatur mit Gradzeichen
   outdoorSprite.setFont(is480p ? &fonts::FreeSansBold24pt7b : &fonts::FreeSansBold18pt7b);
   outdoorSprite.setTextColor(COLOR_TEMP);
   outdoorSprite.setTextDatum(middle_center);
   char tempStr[16];
-  snprintf(tempStr, sizeof(tempStr), "%.1f%cC", outdoorData.temperature, 32);
-  outdoorSprite.drawString(tempStr, centerX, contentY);
+  if (dataValid) {
+    snprintf(tempStr, sizeof(tempStr), "%.1f%cC", outdoorData.temperature, 32);
+    outdoorSprite.drawString(tempStr, centerX, contentY);
+  }
   contentY += lineHeight;
 
   // Kein Luftfeuchtigkeit bei Outdoor
@@ -329,7 +337,7 @@ void drawOutdoorSection() {
 
   // Luftdruck
   outdoorSprite.setTextColor(COLOR_PRESS);
-  outdoorSprite.drawString(String(outdoorData.pressure, 0) + " mbar", centerX, contentY);
+  if (dataValid) outdoorSprite.drawString(String(outdoorData.pressure, 0) + " mbar", centerX, contentY);
   contentY += lineHeight;
 
   // Batterie
@@ -353,7 +361,7 @@ void drawOutdoorSection() {
   contentY += lineHeight - 12;
 
   // Letzter Empfang
-  unsigned long secondsAgo = (millis() - lastOutdoorReceive) / 1000;
+  //unsigned long secondsAgo = (millis() - lastOutdoorReceive) / 1000;
   //outdoorSprite.setFont(&fonts::FreeSans9pt7b);
   outdoorSprite.setFont(&fonts::Font2);
   outdoorSprite.setTextColor(COLOR_TEXT_DIM);
@@ -385,7 +393,7 @@ void setup() {
   // Display initialisieren
   lcd.init();
   lcd.setRotation(DISPLAY_ROTATION);
-  lcd.setBrightness(128);
+  lcd.setBrightness(255);
 
   // Display-Größe erkennen
   screenWidth = lcd.width();
