@@ -30,6 +30,7 @@ typedef struct sensor_data_indoor {
   uint8_t sensor_error;
   uint8_t reset_reason;
   uint8_t sensor_type;      // 0=Outdoor, 1=Indoor
+  uint16_t sleep_time_sec;  // Sleep-Periode in Sekunden
 } sensor_data_indoor;
 
 typedef struct sensor_data_outdoor {
@@ -42,6 +43,7 @@ typedef struct sensor_data_outdoor {
   uint8_t sensor_error;
   uint8_t reset_reason;
   uint8_t sensor_type;      // 0=Outdoor, 1=Indoor
+  uint16_t sleep_time_sec;  // Sleep-Periode in Sekunden
 } sensor_data_outdoor;
 
 sensor_data_indoor dataIndoor;
@@ -117,6 +119,10 @@ void onDataRecv(uint8_t *mac_addr, uint8_t *data, uint8_t data_len) {
     Serial.print("Reset Reason: ");
     Serial.println(dataIndoor.reset_reason);
 
+    Serial.print("Sleep Time: ");
+    Serial.print(dataIndoor.sleep_time_sec);
+    Serial.println(" sec");
+
   } else {
     Serial.println("OUTDOOR (BMP180 only)");
     memcpy(&dataOutdoor, data, min((int)sizeof(dataOutdoor), data_len));
@@ -154,6 +160,10 @@ void onDataRecv(uint8_t *mac_addr, uint8_t *data, uint8_t data_len) {
 
     Serial.print("Reset Reason: ");
     Serial.println(dataOutdoor.reset_reason);
+
+    Serial.print("Sleep Time: ");
+    Serial.print(dataOutdoor.sleep_time_sec);
+    Serial.println(" sec");
   }
 
   Serial.println("========================================\n");

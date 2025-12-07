@@ -59,6 +59,7 @@ struct IndoorData {
     uint32_t timestamp;    // ms
     int8_t rssi;          // dBm
     bool battery_warning;
+    uint16_t sleep_time_sec; // Sleep-Periode in Sekunden
 } __attribute__((packed));
 
 struct OutdoorData {
@@ -68,6 +69,7 @@ struct OutdoorData {
     uint32_t timestamp;    // ms
     int8_t rssi;          // dBm
     bool battery_warning;
+    uint16_t sleep_time_sec; // Sleep-Periode in Sekunden
 } __attribute__((packed));
 
 struct SystemStatus {
