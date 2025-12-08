@@ -1,5 +1,3 @@
-// 9l Washington corrected (mit ESP8266 Package 2.7.4)
-// 9k neuer API für Exchangerate
 // 9i neuer fixer API 
 // 9h -Geschäft neu mit Mobile
 // 9f MAC adresse defined & R&M Guest Access
@@ -19,7 +17,6 @@
 // 3: On base of Trial_NTP_10
 #include <TimeLib.h> 
 #include <ESP8266WiFi.h>
-#include <WiFiClientSecure.h>
 #include <WiFiUdp.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
@@ -61,8 +58,8 @@ double T,P;
 WiFiClient client;
 TextFinder finder(client);
 
-WiFiClientSecure clientSec;
 #include <Credentials.h>
+
 #define maxWlanTrys 100
 
 //const char* timerServerDNSName = "0.europe.pool.ntp.org";
@@ -145,8 +142,7 @@ void setup() {
   airCode[1] = "DBX";
   location[2] = "Singapore,sg";
   airCode[2] = "SIN";
-  location[3] = "Arlington,us";
- // location[3] = "Washington DC., us";
+  location[3] = "Washington DC., us";
   airCode[3] = "IAD";
   location[4] = "Sydney,au";
   airCode[4] = "SYD";

@@ -142,62 +142,61 @@ boolean catchTZInfo(float lon, float lat, float &utc) {
   return ok;
 }
 
-void catchCurrencies() {
-
-  char* host = "api.frankfurter.app";
-  int httpsPort = 443;
-  String result;
-
-  if (DEBUG) Serial.println(fxSym[0]);
-  if (DEBUG) Serial.println(fxSym[1]);
-  if (DEBUG) Serial.println(fxSym[2]);
-  if (DEBUG) Serial.println(fxSym[3]);
-  
-  if (DEBUG) Serial.print("connecting to ");
-  if (DEBUG) Serial.println(host);
-
-  clientSec.setInsecure();
-    if (!clientSec.connect(host, httpsPort)) {
+float catchCurrency(String currency) {
+ // http://api.fixer.io/latest?base=USD;symbols=CHF
+ // fixer API_Key=3f445e437594a277887d96fd0a2b8aa5
+  float wert = 0;
+  if (!client.connect("data.fixer.io", 80)) {
     if (DEBUG) Serial.println("connection failed");
-    return;
+    return wert;
   }
   
-  String url = "/latest";
-  if (DEBUG) Serial.print("requesting URL: ");
-  if (DEBUG) Serial.println(url);
+  String url = "/latest?access_key="; 
+  url += fixerApiKey;
+  url += "&symbols=";
+  url += currency;
 
-  clientSec.print(String("GET ") + url + " HTTP/1.1\r\n" +
-               "Host: " + host + "\r\n" +
-               "User-Agent: BuildFailureDetectorESP8266\r\n" +
+  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
+               "Host: " + "data.fixer.io" + "\r\n" + 
+               "Connection: close\r\n\r\n");
+               
+  Serial.print(String("GET ") + url + " HTTP/1.1\r\n" +
+               "Host: " + "data.fixer.io" + "\r\n" + 
                "Connection: close\r\n\r\n");
 
-  if (DEBUG) Serial.println("request sent");
-  while (clientSec.connected()) {
-    String line = clientSec.readStringUntil('\n');
-    if (line == "\r") {
-      if (DEBUG) Serial.println("headers received");
-      break;
+  delay(100);
+   if (client.connected()) {
+//    finder.find(currency);
+    if (currency == "CHF") finder.find("CHF");
+    else if (currency == "USD") finder.find("USD");
+    else if (currency == "EUR") finder.find("EUR");
+    else if (currency == "GBP") finder.find("GBP");
+    else if (currency == "PLN") finder.find("PLN");
+    else if (currency == "BGN") finder.find("BGN");
+    else if (currency == "AUD") finder.find("AUD");
+    else if (currency == "CNY") finder.find("CNY");
+    else if (currency == "SGD") finder.find("SGD");
+    wert = finder.getFloat();
+    if (currency == "EUR") wert=1.00;
+    while(client.available()){
+      int c = int(client.read());
+      if (DEBUG) Serial.print(char(c));
     }
   }
-  String line = clientSec.readStringUntil('\n');
-  if (DEBUG) Serial.println("reply was:");
-  if (DEBUG) Serial.println("==========");
-  if (DEBUG) Serial.println(line);
-  if (DEBUG) Serial.println("==========");
-  if (DEBUG) Serial.println("closing connection");
+   client.stop();
+  client.flush();
+  return wert;
+}
 
-  for (int i=0; i < 4; i++) {
-    if(fxSym[i].compareTo("EUR")) {
-      result = line.substring(line.indexOf(fxSym[i])+5,line.indexOf(",",line.indexOf(fxSym[i])));
-      fxValue[i]= result.toFloat();
-    }
-    else fxValue[i]=1.00;
-    if (DEBUG) Serial.print(fxSym[i]);
-    if (DEBUG) Serial.print(":   ");
-    if (DEBUG) Serial.println(fxValue[i]);
-  }
+void catchCurrencies() {
 
+  fxValue[0] = catchCurrency(fxSym[0]);
+  
   for (int l = 1; l < 4 ; l++) {
+    do {
+      fxValue[l] = catchCurrency(fxSym[l]);
+//      fxValue[l] = catchCurrency(fxSym[0], fxSym[l]);
+    } while (fxValue[l] ==0);
     fxValue[l] = fxValue[0] / fxValue[l];
     if (firstRun) {
       tft.print(fxSym[l]);
