@@ -231,7 +231,7 @@ wlanInitial:
   if (DEBUG) {
     Serial.print("MAC; ");
     Serial.println(WiFi.macAddress());
-
+    Serial.println(WiFi.localIP());
   }
   if (!screenTest) catchTimes();
  
