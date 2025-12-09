@@ -1,3 +1,69 @@
+// Sucht Airport-Code in der Datenbank und gibt Timezone-Info zurück
+boolean lookupAirportTimezone(const char* code, TimezoneInfo &tz) {
+  for (int i = 0; i < AIRPORT_DATABASE_SIZE; i++) {
+    AirportTimezone apt;
+    memcpy_P(&apt, &AIRPORT_DATABASE[i], sizeof(AirportTimezone));
+
+    if (strcmp_P(code, apt.code) == 0) {
+      tz.airCode = String(code);
+      tz.stdOffset = apt.stdOffset;
+      tz.dstOffset = apt.dstOffset;
+      tz.dstType = apt.dstType;
+      return true;
+    }
+  }
+  return false;
+}
+
+// Initialisiert alle Timezones basierend auf Airport-Codes
+void initializeTimezones() {
+  if (DEBUG) Serial.println("Initializing timezones...");
+
+  for (int i = 0; i < 7; i++) {
+    if (lookupAirportTimezone(AIRPORT_CODES[i], timezones[i])) {
+      if (DEBUG) {
+        Serial.print(AIRPORT_CODES[i]);
+        Serial.print(" -> UTC");
+        Serial.print(timezones[i].stdOffset / 3600.0);
+        Serial.print(" / UTC");
+        Serial.print(timezones[i].dstOffset / 3600.0);
+        Serial.print(" (DST Type: ");
+        Serial.print(timezones[i].dstType);
+        Serial.println(")");
+      }
+
+      if (firstRun) {
+        tft.print(AIRPORT_CODES[i]);
+        tft.print(": UTC");
+        if (timezones[i].stdOffset >= 0) tft.print("+");
+        tft.println(timezones[i].stdOffset / 3600.0);
+      }
+    } else {
+      if (DEBUG) {
+        Serial.print("ERROR: Airport code ");
+        Serial.print(AIRPORT_CODES[i]);
+        Serial.println(" not found in database!");
+      }
+
+      if (firstRun) {
+        tft.setTextColor(ST7735_RED);
+        tft.print("ERROR: ");
+        tft.print(AIRPORT_CODES[i]);
+        tft.println(" not found!");
+        tft.setTextColor(ST7735_WHITE);
+      }
+
+      // Fallback: UTC
+      timezones[i].airCode = String(AIRPORT_CODES[i]);
+      timezones[i].stdOffset = 0;
+      timezones[i].dstOffset = 0;
+      timezones[i].dstType = 0;
+    }
+  }
+
+  if (DEBUG) Serial.println("Timezones initialized.");
+}
+
 void readBMP(double &T, double &P) {
   status = pressure.startTemperature();
   if (status != 0) {
@@ -150,6 +216,35 @@ boolean isDstAU(time_t t) {
   return false;
 }
 
+// Berechnet ob DST aktiv ist für Neuseeland
+boolean isDstNZ(time_t t) {
+  // Letzter Sonntag im September (02:00) bis erster Sonntag im April (03:00)
+  int y = year(t);
+  int m = month(t);
+  int d = day(t);
+
+  // In Neuseeland ist es umgekehrt (Südhalbkugel)
+  if (m < 4 || m > 9) return true;   // Januar-März, Oktober-Dezember
+  if (m > 4 && m < 9) return false;  // Mai bis August
+
+  // Berechne letzten Sonntag im September
+  int septemberLastSunday = 30 - ((5 * y / 4 + 2) % 7);
+
+  // Berechne ersten Sonntag im April
+  int aprilFirstSunday = (7 - (5 * y / 4 + 4) % 7);
+  if (aprilFirstSunday == 0) aprilFirstSunday = 7;
+
+  if (m == 9) {
+    return (d >= septemberLastSunday);
+  }
+
+  if (m == 4) {
+    return (d < aprilFirstSunday);
+  }
+
+  return false;
+}
+
 // Berechnet den Timezone-Offset für eine bestimmte Zeitzone zur gegebenen Zeit
 int getTimezoneOffset(int tzIndex, time_t t) {
   TimezoneInfo tz = timezones[tzIndex];
@@ -171,6 +266,9 @@ int getTimezoneOffset(int tzIndex, time_t t) {
     case 3: // AU
       isDst = isDstAU(t);
       break;
+    case 4: // NZ
+      isDst = isDstNZ(t);
+      break;
   }
 
   return isDst ? tz.dstOffset : tz.stdOffset;
@@ -178,7 +276,7 @@ int getTimezoneOffset(int tzIndex, time_t t) {
 
 // Berechnet die Zeit für eine bestimmte Zeitzone
 time_t getTimeForTimezone(int tzIndex, time_t localTime) {
-  // localTime ist die Zeit in Herisau (Zeitzone 0)
+  // localTime ist die lokale Zeit (Zeitzone 0)
   // Berechne UTC-Zeit
   int localOffset = getTimezoneOffset(0, localTime);
   time_t utcTime = localTime - localOffset;
