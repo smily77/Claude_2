@@ -24,7 +24,7 @@ public:
       cfg.spi_3wire  = false;
       cfg.pin_sclk = 14;            // SPI SCLK (D5)
       cfg.pin_mosi = 13;            // SPI MOSI (D7)
-      cfg.pin_miso = 12;            // SPI MISO (D6) - nicht verwendet für Display
+      cfg.pin_miso = -1;            // MISO nicht verwendet (Pin 12 ist RST!)
       cfg.pin_dc   = 2;             // Data/Command pin (D4)
 
       _bus_instance.config(cfg);
