@@ -17,17 +17,15 @@ public:
     {
       auto cfg = _bus_instance.config();
 
-      cfg.spi_host = VSPI_HOST;     // ESP8266 verwendet HSPI
+      // ESP8266 SPI Konfiguration
       cfg.spi_mode = 0;
       cfg.freq_write = 40000000;    // 40MHz beim Schreiben
       cfg.freq_read  = 16000000;    // 16MHz beim Lesen
       cfg.spi_3wire  = false;
-      cfg.use_lock   = true;
-      cfg.dma_channel = 0;
-      cfg.pin_sclk = 14;            // SPI SCLK
-      cfg.pin_mosi = 13;            // SPI MOSI
-      cfg.pin_miso = 12;            // SPI MISO (nicht verwendet für Display)
-      cfg.pin_dc   = 2;             // Data/Command pin
+      cfg.pin_sclk = 14;            // SPI SCLK (D5)
+      cfg.pin_mosi = 13;            // SPI MOSI (D7)
+      cfg.pin_miso = 12;            // SPI MISO (D6) - nicht verwendet für Display
+      cfg.pin_dc   = 2;             // Data/Command pin (D4)
 
       _bus_instance.config(cfg);
       _panel_instance.setBus(&_bus_instance);
