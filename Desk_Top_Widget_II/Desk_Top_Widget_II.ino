@@ -1,3 +1,5 @@
+// 9l Washington corrected (mit ESP8266 Package 2.7.4)
+// 9k neuer API für Exchangerate
 // 9i neuer fixer API 
 // 9h -Geschäft neu mit Mobile
 // 9f MAC adresse defined & R&M Guest Access
@@ -17,6 +19,7 @@
 // 3: On base of Trial_NTP_10
 #include <TimeLib.h> 
 #include <ESP8266WiFi.h>
+#include <WiFiClientSecure.h>
 #include <WiFiUdp.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
@@ -48,7 +51,7 @@ extern "C" {
 //#define OLD
 #define NEW
 #define SCHWARZ
-#define DEBUG false
+#define DEBUG true
 #define screenTest false
 
 SFE_BMP180 pressure;
@@ -58,8 +61,8 @@ double T,P;
 WiFiClient client;
 TextFinder finder(client);
 
+WiFiClientSecure clientSec;
 #include <Credentials.h>
-
 #define maxWlanTrys 100
 
 //const char* timerServerDNSName = "0.europe.pool.ntp.org";
@@ -142,7 +145,8 @@ void setup() {
   airCode[1] = "DBX";
   location[2] = "Singapore,sg";
   airCode[2] = "SIN";
-  location[3] = "Washington DC., us";
+  location[3] = "Arlington,us";
+ // location[3] = "Washington DC., us";
   airCode[3] = "IAD";
   location[4] = "Sydney,au";
   airCode[4] = "SYD";
@@ -176,7 +180,8 @@ void setup() {
   tft.setCursor( 0, 0 );
 
   tft.print( "Searching for: ");
-  tft.print(ssid2);
+  if (DEBUG) tft.print(ssid1);
+    else tft.print(ssid2);
   tft.setCursor( 0, 16 );
 
 //uint8_t mac[6] {0x18, 0xfe, 0x34, 0xa2, 0x21, 0xd2}; //orginal
@@ -185,7 +190,8 @@ void setup() {
 
 
 if (!screenTest) {      
-    WiFi.begin(ssid2, password2);
+    if (DEBUG) WiFi.begin(ssid1, password1); 
+      else WiFi.begin(ssid2, password2);    
     wifi_station_set_auto_connect(true);
 wlanInitial:  
     wPeriode = 1;
