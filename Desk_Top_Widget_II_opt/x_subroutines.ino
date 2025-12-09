@@ -4,7 +4,7 @@ boolean lookupAirportTimezone(const char* code, TimezoneInfo &tz) {
     AirportTimezone apt;
     memcpy_P(&apt, &AIRPORT_DATABASE[i], sizeof(AirportTimezone));
 
-    if (strcmp_P(code, apt.code) == 0) {
+    if (strcmp(code, apt.code) == 0) {
       tz.airCode = String(code);
       tz.stdOffset = apt.stdOffset;
       tz.dstOffset = apt.dstOffset;

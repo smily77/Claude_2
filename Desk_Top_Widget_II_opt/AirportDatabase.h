@@ -12,7 +12,7 @@
 // 4 = NZ DST (letzter Sonntag September bis erster Sonntag April)
 
 struct AirportTimezone {
-  const char code[4];      // 3-Buchstaben IATA Code
+  char code[4];            // 3-Buchstaben IATA Code
   int stdOffset;           // Standard UTC offset in Sekunden
   int dstOffset;           // DST UTC offset in Sekunden
   byte dstType;            // DST Typ (siehe oben)

@@ -2,7 +2,7 @@
 // Keine Wetter-API und Timezone-API mehr nötig
 
 void catchCurrencies() {
-  char* host = "api.frankfurter.app";
+  const char* host = "api.frankfurter.app";
   int httpsPort = 443;
   String result;
 
