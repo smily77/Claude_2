@@ -40,14 +40,14 @@ public:
 
       cfg.panel_width      = 128;   // Tatsächliche Breite
       cfg.panel_height     = 160;   // Tatsächliche Höhe
-      cfg.offset_x         = 2;     // BLACKTAB Offset
-      cfg.offset_y         = 1;     // BLACKTAB Offset
-      cfg.offset_rotation  = 0;
+      cfg.offset_x         = 2;     // ST7735 160x128 Offset
+      cfg.offset_y         = 1;     // ST7735 160x128 Offset
+      cfg.offset_rotation  = 2;     // Rotation Offset
       cfg.dummy_read_pixel = 8;
       cfg.dummy_read_bits  = 1;
-      cfg.readable         = false;
-      cfg.invert           = false; // BLACKTAB benötigt kein invert
-      cfg.rgb_order        = false; // BGR Order für ST7735
+      cfg.readable         = true;  // Readable aktiviert
+      cfg.invert           = false; // Kein Invert
+      cfg.rgb_order        = true;  // RGB Order (nicht BGR!)
       cfg.dlen_16bit       = false;
       cfg.bus_shared       = false;
 
