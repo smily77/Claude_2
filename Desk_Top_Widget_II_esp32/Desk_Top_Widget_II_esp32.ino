@@ -32,7 +32,6 @@ const char* AIRPORT_CODES[7] = {
 
 WiFiClientSecure clientSec;
 #include <Credentials.h>
-#define maxWlanTrys 100
 
 const char* timerServerDNSName = "0.ch.pool.ntp.org";
 IPAddress timeServer;
@@ -104,37 +103,39 @@ void setup() {
   tft.setTextSize(1);
   tft.setCursor(0, 0);
 
-  tft.print("Searching for: ");
-  if (DEBUG) tft.print(ssid1);
-    else tft.print(ssid2);
-  tft.setCursor(0, 16);
-
   // WiFi-Verbindung (ESP32)
-  WiFi.mode(WIFI_STA);
-  if (DEBUG) WiFi.begin(ssid1, password1);
-    else WiFi.begin(ssid2, password2);
+  // Bei DEBUG: Starte mit SSID1, dann SSID2
+  // Ohne DEBUG: Starte mit SSID2, dann SSID1
+  boolean tryingSsid1 = DEBUG;  // Trackt welche SSID wir gerade versuchen
+  int maxTriesPerSsid = 40;     // 40 * 500ms = 20 Sekunden pro SSID
 
 wlanInitial:
-  wPeriode = 1;
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect(true);  // Complete disconnect
+  delay(100);
+
+  tft.print("Searching: ");
+  if (tryingSsid1) {
+    tft.println(ssid1);
+    WiFi.begin(ssid1, password1);
+  } else {
+    tft.println(ssid2);
+    WiFi.begin(ssid2, password2);
+  }
+
+  wPeriode = 0;
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     tft.print(".");
     wPeriode++;
-    if (wPeriode > maxWlanTrys) {
+    if (wPeriode > maxTriesPerSsid) {
       tft.println();
-      tft.println("Break due to missing WLAN");
-      if (String(ssid1) == WiFi.SSID()) {
-        tft.print("Switch to: ");
-        tft.println(ssid2);
-        WiFi.disconnect();
-        WiFi.begin(ssid2, password2);
-      }
-      else {
-        tft.print("Switch to: ");
-        tft.println(ssid1);
-        WiFi.disconnect();
-        WiFi.begin(ssid1, password1);
-      }
+      tft.println("WLAN timeout!");
+      // Wechsle zur anderen SSID
+      tryingSsid1 = !tryingSsid1;
+      tft.print("Switch to: ");
+      tft.println(tryingSsid1 ? ssid1 : ssid2);
+      delay(500);
       goto wlanInitial;
     }
   }
