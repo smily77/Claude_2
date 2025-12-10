@@ -97,6 +97,7 @@ void setup() {
   // LovyanGFX Initialisierung (Konfiguration via CYD_Display_Config.h)
   tft.init();
   tft.setRotation(1);
+  tft.setBrightness(255);  // Maximale Helligkeit
   tft.setTextWrap(false);
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -169,7 +170,7 @@ wlanInitial:
     tft.print("Starting UDP... ");
     Udp.begin(localPort);
     tft.print("local port: ");
-    tft.println(Udp.localPort());
+    tft.println(localPort);
 
     tft.println("Waiting for NTP sync");
     currentTime = getNtpTime();
