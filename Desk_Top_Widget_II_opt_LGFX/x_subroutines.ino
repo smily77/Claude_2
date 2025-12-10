@@ -46,11 +46,11 @@ void initializeTimezones() {
       }
 
       if (firstRun) {
-        tft.setTextColor(ST7735_RED);
+        tft.setTextColor(TFT_RED);
         tft.print("ERROR: ");
         tft.print(AIRPORT_CODES[i]);
         tft.println(" not found!");
-        tft.setTextColor(ST7735_WHITE);
+        tft.setTextColor(TFT_WHITE);
       }
 
       // Fallback: UTC

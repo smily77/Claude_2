@@ -1,19 +1,26 @@
-// ESP32-C3 Version mit LovyanGFX
+// Optimierte Version mit LovyanGFX - Schnellere und effizientere Grafik-Bibliothek
 // Vereinfachte Zeitberechnung mit lokaler DST-Berechnung
 // Keine Wetter-API für Zeitzonen mehr nötig
 // Kein Web-Interface
 // Aktualisierung nur beim Start und einmal täglich
 // Airport-Code basierte Konfiguration mit automatischem Timezone-Lookup
 #include <TimeLib.h>
-#include <WiFi.h>
+#include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
 #include <WiFiUdp.h>
 #include <SPI.h>
-#include <CYD_Display_Config.h>  // Flexible Display-Konfiguration
+#include "LGFX_ESP8266_ST7735.hpp"
+#include <SFE_BMP180.h>
 #include <Wire.h>
+#include <Streaming.h>
 #include <Ticker.h>
 #include "AirportDatabase.h"
+extern "C" {
+  #include "user_interface.h"
+}
 
+#define NEW
+#define SCHWARZ
 #define DEBUG true
 
 // ============================================
@@ -30,6 +37,10 @@ const char* AIRPORT_CODES[7] = {
 };
 // ============================================
 
+SFE_BMP180 pressure;
+char status;
+double T,P;
+
 WiFiClientSecure clientSec;
 #include <Credentials.h>
 #define maxWlanTrys 100
@@ -42,12 +53,19 @@ const unsigned int localPort = 8888;
 const int NTP_PACKET_SIZE = 48;
 byte packetBuffer[NTP_PACKET_SIZE];
 
-// LovyanGFX Display Instance (Konfiguration via CYD_Display_Config.h)
+#if defined(SCHWARZ)
+  #define ledPin 0
+#else
+  #define ledPin 4
+#endif
+
+// LovyanGFX Display Instance
 static LGFX tft;
 
 time_t currentTime = 0;
 char anzeige[24];
 int secondLast, minuteLast;
+int helligkeit;
 boolean firstRun = true;
 int wPeriode;
 
@@ -88,19 +106,26 @@ void watchDogAction() {
   tft.println("WATCHDOG");
   tft.println("ATTACK");
   delay(10000);
-  ESP.restart();
+  ESP.reset();
 }
 
 void setup() {
-  if (DEBUG) Serial.begin(115200);
+  if (DEBUG) Serial.begin(9600);
 
-  // LovyanGFX Initialisierung (Konfiguration via CYD_Display_Config.h)
+#if defined(NEW)
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, LOW);
+#endif
+
+  // LovyanGFX Initialisierung
   tft.init();
-  tft.setRotation(1);
-
-  tft.setBrightness(255);  // Maximale Helligkeit
-
   tft.setTextWrap(false);
+  tft.setTextColor(TFT_WHITE);
+#if defined(NEW)
+  tft.setRotation(1);
+#elif defined(OLD)
+  tft.setRotation(3);
+#endif
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.setTextSize(1);
@@ -111,10 +136,10 @@ void setup() {
     else tft.print(ssid2);
   tft.setCursor(0, 16);
 
-  // WiFi-Verbindung (ESP32)
-  WiFi.mode(WIFI_STA);
+  // WiFi-Verbindung
   if (DEBUG) WiFi.begin(ssid1, password1);
     else WiFi.begin(ssid2, password2);
+  wifi_station_set_auto_connect(true);
 
 wlanInitial:
   wPeriode = 1;
@@ -128,14 +153,14 @@ wlanInitial:
       if (String(ssid1) == WiFi.SSID()) {
         tft.print("Switch to: ");
         tft.println(ssid2);
-        WiFi.disconnect();
         WiFi.begin(ssid2, password2);
+        wifi_station_set_auto_connect(true);
       }
       else {
         tft.print("Switch to: ");
         tft.println(ssid1);
-        WiFi.disconnect();
         WiFi.begin(ssid1, password1);
+        wifi_station_set_auto_connect(true);
       }
       goto wlanInitial;
     }
@@ -172,11 +197,7 @@ wlanInitial:
     tft.print("Starting UDP... ");
     Udp.begin(localPort);
     tft.print("local port: ");
-
-    tft.println(localPort);
-
     tft.println(Udp.localPort());
-
 
     tft.println("Waiting for NTP sync");
     currentTime = getNtpTime();
@@ -194,7 +215,16 @@ wlanInitial:
   minuteLast = minute();
   displayMainScreen();
 
-  // Start Watchdog
+#if defined(SCHWARZ)
+  Wire.begin(4, 5);
+  pressure.begin();
+#else
+  if (!DEBUG) {
+    Wire.begin(1, 3);
+    pressure.begin();
+  }
+#endif
+
   secondTick.attach(1, ISRwatchDog);
 }
 
@@ -218,5 +248,11 @@ void loop() {
     displayMainScreen();
   }
 
+#if defined(NEW)
+  helligkeit = analogRead(A0);
+  delay(100);
+  if (helligkeit > 1010) helligkeit = 1010;
+  analogWrite(ledPin, helligkeit);
+#endif
   watchDogFeed();
 }

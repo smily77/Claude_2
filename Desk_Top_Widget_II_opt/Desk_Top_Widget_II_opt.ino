@@ -2,6 +2,7 @@
 // Keine Wetter-API für Zeitzonen mehr nötig
 // Kein Web-Interface
 // Aktualisierung nur beim Start und einmal täglich
+// Airport-Code basierte Konfiguration mit automatischem Timezone-Lookup
 #include <TimeLib.h>
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
@@ -15,6 +16,7 @@
 #include <Ticker.h>
 #include <Fonts/FreeSans9pt7b.h>
 #include <Fonts/FreeSansBold18pt7b.h>
+#include "AirportDatabase.h"
 extern "C" {
   #include "user_interface.h"
 }
@@ -22,6 +24,20 @@ extern "C" {
 #define NEW
 #define SCHWARZ
 #define DEBUG true
+
+// ============================================
+// KONFIGURATION: Nur Airport-Codes ändern!
+// ============================================
+const char* AIRPORT_CODES[7] = {
+  "ZRH",  // 0: Lokale Zeit (Zürich, Schweiz)
+  "DXB",  // 1: Dubai, VAE
+  "SIN",  // 2: Singapore
+  "IAD",  // 3: Washington DC, USA
+  "SYD",  // 4: Sydney, Australien
+  "BLR",  // 5: Bangalore, Indien
+  "SFO"   // 6: San Francisco, USA
+};
+// ============================================
 
 SFE_BMP180 pressure;
 char status;
@@ -58,23 +74,15 @@ int helligkeit;
 boolean firstRun = true;
 int wPeriode;
 
-// Timezone-Strukturen
+// Timezone-Strukturen (werden beim Start aus Airport-Codes gefüllt)
 struct TimezoneInfo {
   String airCode;
   int stdOffset;      // Standard UTC offset in Sekunden
   int dstOffset;      // DST UTC offset in Sekunden
-  byte dstType;       // 0=kein DST, 1=EU, 2=US, 3=AU
+  byte dstType;       // 0=kein DST, 1=EU, 2=US, 3=AU, 4=NZ
 };
 
-TimezoneInfo timezones[7] = {
-  {"HER", 3600, 7200, 1},      // 0: Herisau, CH (UTC+1/+2, EU DST)
-  {"DBX", 14400, 14400, 0},    // 1: Dubai, AE (UTC+4, kein DST)
-  {"SIN", 28800, 28800, 0},    // 2: Singapore, SG (UTC+8, kein DST)
-  {"IAD", -18000, -14400, 2},  // 3: Arlington/Washington DC, US (UTC-5/-4, US DST)
-  {"SYD", 36000, 39600, 3},    // 4: Sydney, AU (UTC+10/+11, AU DST)
-  {"BLR", 19800, 19800, 0},    // 5: Bangalore, IN (UTC+5:30, kein DST)
-  {"SFO", -28800, -25200, 2}   // 6: Sausalito/San Francisco, US (UTC-8/-7, US DST)
-};
+TimezoneInfo timezones[7];
 
 // Wechselkurs-Daten
 String fxSym[4] = {"CHF", "USD", "EUR", "GBP"};
@@ -177,6 +185,11 @@ wlanInitial:
     Serial.println(WiFi.macAddress());
     Serial.println(WiFi.localIP());
   }
+
+  // Initialisiere Timezones aus Airport-Codes
+  clearTFTScreen();
+  tft.println("Loading timezones...");
+  initializeTimezones();
 
   // NTP Zeit holen
   clearTFTScreen();
