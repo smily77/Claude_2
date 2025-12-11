@@ -73,10 +73,8 @@ struct OutdoorData {
 } __attribute__((packed));
 
 struct SystemStatus {
-    uint8_t indoor_active;
-    uint8_t outdoor_active;
-    unsigned long indoor_last_seen;   // Sekunden
-    unsigned long outdoor_last_seen;  // Sekunden
+    unsigned long indoor_last_seen;   // Millisekunden
+    unsigned long outdoor_last_seen;  // Millisekunden
     uint16_t esp_now_packets;
     uint8_t wifi_channel;
 } __attribute__((packed));
@@ -212,17 +210,18 @@ void drawIndoorSection() {
     int boxY = is480p ? 70 : 55;
     int boxW = screenWidth / 2 - 10;
     int boxH = screenHeight - boxY - 5;
-    
+
     drawSensorBox(boxX, boxY, boxW, boxH, "INDOOR", COLOR_INDOOR);
-    
+
     int titleHeight = 42;
     int spriteY = boxY + titleHeight;
     int spriteW = boxW - 4;
     int spriteH = boxH - titleHeight - 2;
-    
+
     indoorSprite.fillSprite(COLOR_BG);
-    
-    if (!indoorReceived || !systemStatus.indoor_active) {
+
+    if (!indoorReceived) {
+        // Noch nie Daten empfangen
         indoorSprite.setFont(&fonts::FreeSans9pt7b);
         indoorSprite.setTextColor(COLOR_TEXT_DIM);
         indoorSprite.setTextDatum(middle_center);
@@ -231,32 +230,43 @@ void drawIndoorSection() {
         indoorSprite.pushSprite(boxX + 2, spriteY);
         return;
     }
-    
+
     int contentY = 17;
     int lineHeight = is480p ? 35 : 28;
     int centerX = spriteW / 2;
-    
-    // Temperatur
+
+    // Timeout-Berechnung: Master entscheidet selbst über Gültigkeit
+    unsigned long secondsAgo = systemStatus.indoor_last_seen / 1000;
+    bool dataValid = (systemStatus.indoor_last_seen > 0) &&
+                     (secondsAgo <= (2.1 * indoorData.sleep_time_sec));
+
+    // Temperatur (nur wenn Daten gültig)
     indoorSprite.setFont(is480p ? &fonts::FreeSansBold24pt7b : &fonts::FreeSansBold18pt7b);
     indoorSprite.setTextColor(COLOR_TEMP);
     indoorSprite.setTextDatum(middle_center);
-    char tempStr[16];
-    snprintf(tempStr, sizeof(tempStr), "%.1f C", indoorData.temperature);
-    indoorSprite.drawString(tempStr, centerX, contentY);
+    if (dataValid) {
+        char tempStr[16];
+        snprintf(tempStr, sizeof(tempStr), "%.1f C", indoorData.temperature);
+        indoorSprite.drawString(tempStr, centerX, contentY);
+    }
     contentY += lineHeight;
-    
-    // Luftfeuchtigkeit
+
+    // Luftfeuchtigkeit (nur wenn Daten gültig)
     indoorSprite.setFont(is480p ? &fonts::FreeSansBold12pt7b : &fonts::FreeSans9pt7b);
     indoorSprite.setTextColor(COLOR_HUM);
-    indoorSprite.drawString(String(indoorData.humidity, 0) + "%", centerX, contentY);
+    if (dataValid) {
+        indoorSprite.drawString(String(indoorData.humidity, 0) + "%", centerX, contentY);
+    }
     contentY += lineHeight - 5;
-    
-    // Luftdruck
+
+    // Luftdruck (nur wenn Daten gültig)
     indoorSprite.setTextColor(COLOR_PRESS);
-    indoorSprite.drawString(String(indoorData.pressure, 0) + " mbar", centerX, contentY);
+    if (dataValid) {
+        indoorSprite.drawString(String(indoorData.pressure, 0) + " mbar", centerX, contentY);
+    }
     contentY += lineHeight;
-    
-    // Batterie
+
+    // Batterie (immer anzeigen)
     indoorSprite.setFont(&fonts::Font2);
     uint16_t battColor = indoorData.battery_warning ? COLOR_BATTERY_LOW : COLOR_BATTERY_OK;
     indoorSprite.setTextColor(battColor);
@@ -266,16 +276,16 @@ void drawIndoorSection() {
         indoorSprite.drawString("LOW!", centerX, contentY + 18);
     }
     contentY += lineHeight - 12;
-    
-    // RSSI
+
+    // RSSI (immer anzeigen)
     indoorSprite.setTextColor(getRSSIColor(indoorData.rssi));
     indoorSprite.drawString("RSSI: " + String(indoorData.rssi) + " dBm", centerX, contentY);
     contentY += lineHeight - 12;
-    
-    // Zeit seit letztem Update
+
+    // Zeit seit letztem Update (immer anzeigen)
     indoorSprite.setTextColor(COLOR_TEXT_DIM);
-    indoorSprite.drawString(formatTime(systemStatus.indoor_last_seen), centerX, contentY);
-    
+    indoorSprite.drawString(formatTime(secondsAgo), centerX, contentY);
+
     indoorSprite.pushSprite(boxX + 2, spriteY);
 }
 
@@ -284,17 +294,18 @@ void drawOutdoorSection() {
     int boxY = is480p ? 70 : 55;
     int boxW = screenWidth / 2 - 10;
     int boxH = screenHeight - boxY - 5;
-    
+
     drawSensorBox(boxX, boxY, boxW, boxH, "OUTDOOR", COLOR_OUTDOOR);
-    
+
     int titleHeight = 42;
     int spriteY = boxY + titleHeight;
     int spriteW = boxW - 4;
     int spriteH = boxH - titleHeight - 2;
-    
+
     outdoorSprite.fillSprite(COLOR_BG);
-    
-    if (!outdoorReceived || !systemStatus.outdoor_active) {
+
+    if (!outdoorReceived) {
+        // Noch nie Daten empfangen
         outdoorSprite.setFont(&fonts::FreeSans9pt7b);
         outdoorSprite.setTextColor(COLOR_TEXT_DIM);
         outdoorSprite.setTextDatum(middle_center);
@@ -303,32 +314,41 @@ void drawOutdoorSection() {
         outdoorSprite.pushSprite(boxX + 2, spriteY);
         return;
     }
-    
+
     int contentY = 17;
     int lineHeight = is480p ? 35 : 28;
     int centerX = spriteW / 2;
-    
-    // Temperatur
+
+    // Timeout-Berechnung: Master entscheidet selbst über Gültigkeit
+    unsigned long secondsAgo = systemStatus.outdoor_last_seen / 1000;
+    bool dataValid = (systemStatus.outdoor_last_seen > 0) &&
+                     (secondsAgo <= (2.1 * outdoorData.sleep_time_sec));
+
+    // Temperatur (nur wenn Daten gültig)
     outdoorSprite.setFont(is480p ? &fonts::FreeSansBold24pt7b : &fonts::FreeSansBold18pt7b);
     outdoorSprite.setTextColor(COLOR_TEMP);
     outdoorSprite.setTextDatum(middle_center);
-    char tempStr[16];
-    snprintf(tempStr, sizeof(tempStr), "%.1f C", outdoorData.temperature);
-    outdoorSprite.drawString(tempStr, centerX, contentY);
+    if (dataValid) {
+        char tempStr[16];
+        snprintf(tempStr, sizeof(tempStr), "%.1f C", outdoorData.temperature);
+        outdoorSprite.drawString(tempStr, centerX, contentY);
+    }
     contentY += lineHeight;
-    
+
     // Keine Luftfeuchtigkeit
     outdoorSprite.setFont(is480p ? &fonts::FreeSansBold12pt7b : &fonts::FreeSans9pt7b);
     outdoorSprite.setTextColor(COLOR_TEXT_DIM);
     outdoorSprite.drawString("(no humidity)", centerX, contentY);
     contentY += lineHeight - 5;
-    
-    // Luftdruck
+
+    // Luftdruck (nur wenn Daten gültig)
     outdoorSprite.setTextColor(COLOR_PRESS);
-    outdoorSprite.drawString(String(outdoorData.pressure, 0) + " mbar", centerX, contentY);
+    if (dataValid) {
+        outdoorSprite.drawString(String(outdoorData.pressure, 0) + " mbar", centerX, contentY);
+    }
     contentY += lineHeight;
-    
-    // Batterie
+
+    // Batterie (immer anzeigen)
     outdoorSprite.setFont(&fonts::Font2);
     uint16_t battColor = outdoorData.battery_warning ? COLOR_BATTERY_LOW : COLOR_BATTERY_OK;
     outdoorSprite.setTextColor(battColor);
@@ -338,16 +358,16 @@ void drawOutdoorSection() {
         outdoorSprite.drawString("LOW!", centerX, contentY + 18);
     }
     contentY += lineHeight - 12;
-    
-    // RSSI
+
+    // RSSI (immer anzeigen)
     outdoorSprite.setTextColor(getRSSIColor(outdoorData.rssi));
     outdoorSprite.drawString("RSSI: " + String(outdoorData.rssi) + " dBm", centerX, contentY);
     contentY += lineHeight - 12;
-    
-    // Zeit seit letztem Update
+
+    // Zeit seit letztem Update (immer anzeigen)
     outdoorSprite.setTextColor(COLOR_TEXT_DIM);
-    outdoorSprite.drawString(formatTime(systemStatus.outdoor_last_seen), centerX, contentY);
-    
+    outdoorSprite.drawString(formatTime(secondsAgo), centerX, contentY);
+
     outdoorSprite.pushSprite(boxX + 2, spriteY);
 }
 
@@ -394,9 +414,9 @@ void pollI2CData() {
     // System Status (ID 0x03)
     if (newDataMask & 0x08) {  // Bit 3 für ID 0x03
         if (i2cBridge.readStruct(BRIDGE_ADDRESS_1, 0x03, systemStatus)) {
-            Serial.printf("[Status] Indoor: %s, Outdoor: %s, Packets: %d\n",
-                         systemStatus.indoor_active ? "ON" : "OFF",
-                         systemStatus.outdoor_active ? "ON" : "OFF",
+            Serial.printf("[Status] Indoor: %lu ms ago, Outdoor: %lu ms ago, Packets: %d\n",
+                         systemStatus.indoor_last_seen,
+                         systemStatus.outdoor_last_seen,
                          systemStatus.esp_now_packets);
         }
     }
@@ -514,14 +534,14 @@ void loop() {
     // Display aktualisieren
     if (now - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
         lastDisplayUpdate = now;
-        
+
         drawHeader();
-        
-        if (indoorReceived || systemStatus.indoor_active) {
+
+        if (indoorReceived) {
             drawIndoorSection();
         }
-        
-        if (outdoorReceived || systemStatus.outdoor_active) {
+
+        if (outdoorReceived) {
             drawOutdoorSection();
         }
     }

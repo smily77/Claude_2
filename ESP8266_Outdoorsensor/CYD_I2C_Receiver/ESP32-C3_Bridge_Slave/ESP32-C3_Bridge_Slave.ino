@@ -55,8 +55,6 @@ struct OutdoorData {
 
 // System Status (optional)
 struct SystemStatus {
-    uint8_t indoor_active;
-    uint8_t outdoor_active;
     unsigned long indoor_last_seen;   // ms seit letztem Empfang
     unsigned long outdoor_last_seen;  // ms seit letztem Empfang
     uint16_t esp_now_packets;         // Anzahl empfangener Pakete
@@ -144,13 +142,12 @@ void onDataReceive(const esp_now_recv_info* recv_info, const uint8_t* data, int 
         
         // Via I2C Bridge aktualisieren
         i2cBridge.updateStruct(0x01, indoorData);
-        
+
         lastIndoorReceived = millis();
-        systemStatus.indoor_active = 1;
-        
+
         #if DEBUG_SERIAL
         Serial.printf("[INDOOR]  Temp: %.1f°C, Hum: %.1f%%, Press: %.0f mbar, Batt: %d mV\n",
-                     indoorData.temperature, indoorData.humidity, 
+                     indoorData.temperature, indoorData.humidity,
                      indoorData.pressure, indoorData.battery_mv);
         #endif
         
@@ -170,13 +167,12 @@ void onDataReceive(const esp_now_recv_info* recv_info, const uint8_t* data, int 
         
         // Via I2C Bridge aktualisieren
         i2cBridge.updateStruct(0x02, outdoorData);
-        
+
         lastOutdoorReceived = millis();
-        systemStatus.outdoor_active = 1;
-        
+
         #if DEBUG_SERIAL
         Serial.printf("[OUTDOOR] Temp: %.1f°C, Press: %.0f mbar, Batt: %d mV\n",
-                     outdoorData.temperature, outdoorData.pressure, 
+                     outdoorData.temperature, outdoorData.pressure,
                      outdoorData.battery_mv);
         #endif
     }
@@ -189,28 +185,16 @@ void onDataReceive(const esp_now_recv_info* recv_info, const uint8_t* data, int 
 
 void updateSystemStatus() {
     unsigned long now = millis();
-    
-    // Zeit seit letztem Empfang berechnen
-    systemStatus.indoor_last_seen = (lastIndoorReceived > 0) ? 
-                                    (now - lastIndoorReceived) / 1000 : 999999;
-    systemStatus.outdoor_last_seen = (lastOutdoorReceived > 0) ? 
-                                     (now - lastOutdoorReceived) / 1000 : 999999;
-    
-    // Aktiv-Status basierend auf dynamischem Timeout (2.1 × Sleep-Zeit)
-    // Sensor teilt seine Sleep-Zeit mit → Timeout passt sich automatisch an
-    uint16_t indoor_timeout = indoorData.sleep_time_sec * 2.1;
-    uint16_t outdoor_timeout = outdoorData.sleep_time_sec * 2.1;
 
-    if (systemStatus.indoor_last_seen > indoor_timeout) {
-        systemStatus.indoor_active = 0;
-    }
-    if (systemStatus.outdoor_last_seen > outdoor_timeout) {
-        systemStatus.outdoor_active = 0;
-    }
-    
+    // Zeit seit letztem Empfang berechnen (in Millisekunden für den Master)
+    systemStatus.indoor_last_seen = (lastIndoorReceived > 0) ?
+                                    (now - lastIndoorReceived) : 0;
+    systemStatus.outdoor_last_seen = (lastOutdoorReceived > 0) ?
+                                     (now - lastOutdoorReceived) : 0;
+
     systemStatus.esp_now_packets = totalPacketsReceived;
     systemStatus.wifi_channel = ESPNOW_CHANNEL;
-    
+
     // Status via I2C aktualisieren
     i2cBridge.updateStruct(0x03, systemStatus);
 }
@@ -314,14 +298,12 @@ void loop() {
         #if DEBUG_SERIAL
         // Status-Report
         Serial.println("\n--- Status Report ---");
-        Serial.printf("Indoor:  %s (last: %lu sec ago)\n", 
-                     systemStatus.indoor_active ? "ACTIVE" : "INACTIVE",
+        Serial.printf("Indoor:  last seen %lu ms ago\n",
                      systemStatus.indoor_last_seen);
-        Serial.printf("Outdoor: %s (last: %lu sec ago)\n",
-                     systemStatus.outdoor_active ? "ACTIVE" : "INACTIVE", 
+        Serial.printf("Outdoor: last seen %lu ms ago\n",
                      systemStatus.outdoor_last_seen);
         Serial.printf("Total packets: %d\n", systemStatus.esp_now_packets);
-        
+
         // I2C Status
         uint8_t i2cStatus = i2cBridge.getStatusByte();
         Serial.printf("I2C new data flags: 0x%02X\n", i2cStatus);
