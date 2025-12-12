@@ -233,32 +233,38 @@ void drawHeader() {
         }
     }
 
-    // WiFi Status (rechts oben)
-    lcd.setFont(&fonts::Font2);
-    lcd.setTextDatum(top_right);
-
-    if (wifiConnected) {
-        lcd.setTextColor(COLOR_RSSI_GOOD);
-        lcd.drawString("WiFi", screenWidth - 5, 5);
-    } else {
-        lcd.setTextColor(COLOR_RSSI_POOR);
-        lcd.drawString("No WiFi", screenWidth - 5, 5);
-    }
-
-    // SD-Karten Status (rechts oben, zweite Zeile)
-    if (sdCardAvailable) {
-        lcd.setTextColor(COLOR_RSSI_GOOD);
-        lcd.drawString("SD", screenWidth - 5, 20);
-    }
-
     // I2C Bridge Status (links oben)
+    lcd.setFont(&fonts::Font2);
     lcd.setTextDatum(top_left);
     if (systemStatus.esp_now_packets > 0) {
         lcd.setTextColor(COLOR_RSSI_GOOD);
-        lcd.drawString("Bridge OK", 5, 5);
+        lcd.drawString("Bridge OK", 5, 0);
     } else {
         lcd.setTextColor(COLOR_RSSI_MEDIUM);
-        lcd.drawString("Waiting...", 5, 5);
+        lcd.drawString("Waiting...", 5, 0);
+    }
+
+    // SD-Karten Status (links unten, im blauen Bereich)
+    if (sdCardAvailable) {
+        lcd.setTextColor(COLOR_RSSI_GOOD);
+        lcd.drawString("SD", 5, 20);
+    }
+
+    // WiFi Status (rechts oben)
+    lcd.setTextDatum(top_right);
+    if (wifiConnected) {
+        lcd.setTextColor(COLOR_RSSI_GOOD);
+        lcd.drawString("WiFi", screenWidth - 5, 0);
+    } else {
+        lcd.setTextColor(COLOR_RSSI_POOR);
+        lcd.drawString("No WiFi", screenWidth - 5, 0);
+    }
+
+    // IP letztes Byte anzeigen (rechts unten, im blauen Bereich)
+    if (wifiConnected) {
+        IPAddress ip = WiFi.localIP();
+        lcd.setTextColor(COLOR_RSSI_GOOD);
+        lcd.drawString(String(ip[3]), screenWidth - 5, 20);  // Letztes Byte der IP
     }
 }
 
