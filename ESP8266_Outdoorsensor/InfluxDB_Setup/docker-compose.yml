@@ -1,0 +1,51 @@
+version: '3.8'
+
+# InfluxDB + Grafana Setup für QNAP NAS
+# Für ESP32 Sensor Datenlogging
+
+services:
+  # InfluxDB v2 - Zeitreihen-Datenbank
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: influxdb
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    volumes:
+      - ./influxdb/data:/var/lib/influxdb2
+      - ./influxdb/config:/etc/influxdb2
+    environment:
+      # Initiale Admin-Daten (nur beim ersten Start)
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=admin12345678  # ÄNDERN!
+      - DOCKER_INFLUXDB_INIT_ORG=home
+      - DOCKER_INFLUXDB_INIT_BUCKET=sensors
+      - DOCKER_INFLUXDB_INIT_RETENTION=365d  # Daten 1 Jahr behalten
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-auth-token  # ÄNDERN!
+    networks:
+      - monitoring
+
+  # Grafana - Visualisierung
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin  # ÄNDERN!
+      - GF_INSTALL_PLUGINS=
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+    depends_on:
+      - influxdb
+    networks:
+      - monitoring
+
+networks:
+  monitoring:
+    driver: bridge
