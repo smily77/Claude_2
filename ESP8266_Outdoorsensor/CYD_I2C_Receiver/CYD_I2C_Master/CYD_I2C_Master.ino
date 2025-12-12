@@ -15,11 +15,14 @@
 #include <Credentials.h>
 #include <WiFi.h>
 #include <time.h>
+#include <SD.h>
+#include <SPI.h>
+#include <WebServer.h>
 #include "I2CSensorBridge.h"
 
 // ==================== KONFIGURATION ====================
 
-// I2C Konfiguration 
+// I2C Konfiguration
 #ifndef extSDA
   #define extSDA 22
 #endif
@@ -34,6 +37,12 @@
 #define BRIDGE_ADDRESS_1 0x20          // Bridge Adresse (ESP32-C3)
 // #define BRIDGE_ADDRESS_2 0x21       // Zweite Bridge (falls vorhanden)
 
+// SD-Karte Konfiguration (CYD Standard-Pins)
+#define SD_CS    5
+#define SD_MOSI  23
+#define SD_MISO  19
+#define SD_SCK   18
+
 // WiFi Konfiguration (optional für NTP)
 
 #define NTP_SERVER "pool.ntp.org"
@@ -47,6 +56,7 @@
 #define I2C_POLL_INTERVAL 1000        // I2C alle 1 Sekunde abfragen
 #define DISPLAY_UPDATE_INTERVAL 5000  // Display-Zeit alle 5 Sekunden
 #define WIFI_RETRY_INTERVAL 30000     // WiFi-Reconnect alle 30 Sekunden
+#define SD_LOG_INTERVAL 60000         // SD-Log alle 60 Sekunden (1 Minute)
 
 // ==================== DATENSTRUKTUREN ====================
 
@@ -129,6 +139,14 @@ unsigned long lastWiFiRetry = 0;
 bool wifiConnected = false;
 bool timeConfigured = false;
 
+// SD-Karte
+bool sdCardAvailable = false;
+unsigned long lastSDLog = 0;
+String currentDateString = "";
+
+// Webserver
+WebServer server(80);
+
 // ==================== DISPLAY FUNKTIONEN ====================
 
 uint16_t getRSSIColor(int rssi) {
@@ -184,6 +202,12 @@ void drawHeader() {
     } else {
         lcd.setTextColor(COLOR_RSSI_POOR);
         lcd.drawString("No WiFi", screenWidth - 5, 5);
+    }
+
+    // SD-Karten Status (rechts oben, zweite Zeile)
+    if (sdCardAvailable) {
+        lcd.setTextColor(COLOR_RSSI_GOOD);
+        lcd.drawString("SD", screenWidth - 5, 20);
     }
 
     // I2C Bridge Status (links oben)
@@ -454,6 +478,269 @@ void setupWiFi() {
     }
 }
 
+// ==================== SD-KARTE FUNKTIONEN ====================
+
+bool initSDCard() {
+    Serial.println("\n[SD] Initializing SD Card...");
+
+    // SPI für SD-Karte initialisieren
+    SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
+
+    if (!SD.begin(SD_CS)) {
+        Serial.println("[SD] No SD Card found or initialization failed");
+        return false;
+    }
+
+    uint8_t cardType = SD.cardType();
+
+    if (cardType == CARD_NONE) {
+        Serial.println("[SD] No SD card attached");
+        return false;
+    }
+
+    Serial.print("[SD] Card Type: ");
+    if (cardType == CARD_MMC) {
+        Serial.println("MMC");
+    } else if (cardType == CARD_SD) {
+        Serial.println("SDSC");
+    } else if (cardType == CARD_SDHC) {
+        Serial.println("SDHC");
+    } else {
+        Serial.println("UNKNOWN");
+    }
+
+    uint64_t cardSize = SD.cardSize() / (1024 * 1024);
+    Serial.printf("[SD] Card Size: %llu MB\n", cardSize);
+    Serial.printf("[SD] Used Space: %llu MB\n", SD.usedBytes() / (1024 * 1024));
+
+    return true;
+}
+
+String getCurrentDateString() {
+    if (!timeConfigured) return "unknown";
+
+    struct tm timeinfo;
+    if (!getLocalTime(&timeinfo)) return "unknown";
+
+    char dateStr[16];
+    strftime(dateStr, sizeof(dateStr), "%Y%m%d", &timeinfo);
+    return String(dateStr);
+}
+
+String getDateTimeString() {
+    if (!timeConfigured) return "N/A";
+
+    struct tm timeinfo;
+    if (!getLocalTime(&timeinfo)) return "N/A";
+
+    char dateTimeStr[32];
+    strftime(dateTimeStr, sizeof(dateTimeStr), "%Y-%m-%d %H:%M:%S", &timeinfo);
+    return String(dateTimeStr);
+}
+
+void logIndoorData() {
+    if (!sdCardAvailable || !indoorReceived) return;
+
+    String dateStr = getCurrentDateString();
+    if (dateStr == "unknown") return; // Keine gültige Zeit
+
+    String filename = "/" + dateStr + "_indoor.csv";
+    bool fileExists = SD.exists(filename);
+
+    File file = SD.open(filename, FILE_APPEND);
+    if (!file) {
+        Serial.println("[SD] Failed to open indoor log file");
+        return;
+    }
+
+    // Header schreiben, falls neue Datei
+    if (!fileExists) {
+        file.println("DateTime,Temperature_C,Humidity_%,Pressure_mbar,Battery_mV,RSSI_dBm,Battery_Warning,Sleep_Time_sec");
+    }
+
+    // Daten schreiben
+    file.print(getDateTimeString());
+    file.print(",");
+    file.print(indoorData.temperature, 1);
+    file.print(",");
+    file.print(indoorData.humidity, 1);
+    file.print(",");
+    file.print(indoorData.pressure, 0);
+    file.print(",");
+    file.print(indoorData.battery_mv);
+    file.print(",");
+    file.print(indoorData.rssi);
+    file.print(",");
+    file.print(indoorData.battery_warning ? "1" : "0");
+    file.print(",");
+    file.println(indoorData.sleep_time_sec);
+
+    file.close();
+    Serial.printf("[SD] Indoor data logged to %s\n", filename.c_str());
+}
+
+void logOutdoorData() {
+    if (!sdCardAvailable || !outdoorReceived) return;
+
+    String dateStr = getCurrentDateString();
+    if (dateStr == "unknown") return; // Keine gültige Zeit
+
+    String filename = "/" + dateStr + "_outdoor.csv";
+    bool fileExists = SD.exists(filename);
+
+    File file = SD.open(filename, FILE_APPEND);
+    if (!file) {
+        Serial.println("[SD] Failed to open outdoor log file");
+        return;
+    }
+
+    // Header schreiben, falls neue Datei
+    if (!fileExists) {
+        file.println("DateTime,Temperature_C,Pressure_mbar,Battery_mV,RSSI_dBm,Battery_Warning,Sleep_Time_sec");
+    }
+
+    // Daten schreiben
+    file.print(getDateTimeString());
+    file.print(",");
+    file.print(outdoorData.temperature, 1);
+    file.print(",");
+    file.print(outdoorData.pressure, 0);
+    file.print(",");
+    file.print(outdoorData.battery_mv);
+    file.print(",");
+    file.print(outdoorData.rssi);
+    file.print(",");
+    file.print(outdoorData.battery_warning ? "1" : "0");
+    file.print(",");
+    file.println(outdoorData.sleep_time_sec);
+
+    file.close();
+    Serial.printf("[SD] Outdoor data logged to %s\n", filename.c_str());
+}
+
+// ==================== WEBSERVER FUNKTIONEN ====================
+
+void handleRoot() {
+    String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'>";
+    html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
+    html += "<title>CYD Sensor Logger</title>";
+    html += "<style>";
+    html += "body { font-family: Arial, sans-serif; margin: 20px; background: #f0f0f0; }";
+    html += "h1 { color: #333; }";
+    html += ".container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }";
+    html += ".file-list { margin-top: 20px; }";
+    html += ".file-item { padding: 10px; margin: 5px 0; background: #e8f4f8; border-radius: 5px; }";
+    html += ".file-item a { color: #0066cc; text-decoration: none; font-weight: bold; }";
+    html += ".file-item a:hover { text-decoration: underline; }";
+    html += ".status { padding: 10px; margin: 10px 0; border-radius: 5px; }";
+    html += ".status.ok { background: #d4edda; color: #155724; }";
+    html += ".status.error { background: #f8d7da; color: #721c24; }";
+    html += ".info { color: #666; font-size: 0.9em; }";
+    html += "</style></head><body>";
+    html += "<div class='container'>";
+    html += "<h1>🌡️ CYD Sensor Datenlogger</h1>";
+
+    if (!sdCardAvailable) {
+        html += "<div class='status error'>❌ Keine SD-Karte gefunden</div>";
+    } else {
+        html += "<div class='status ok'>✅ SD-Karte aktiv</div>";
+        html += "<p class='info'>Speicherplatz: " + String(SD.usedBytes() / 1024) + " KB belegt von " + String(SD.cardSize() / (1024 * 1024)) + " MB</p>";
+
+        html += "<h2>📁 Verfügbare Log-Dateien:</h2>";
+        html += "<div class='file-list'>";
+
+        File root = SD.open("/");
+        File file = root.openNextFile();
+        bool hasFiles = false;
+
+        while (file) {
+            if (!file.isDirectory()) {
+                String filename = String(file.name());
+                if (filename.endsWith(".csv")) {
+                    hasFiles = true;
+                    html += "<div class='file-item'>";
+                    html += "📄 <a href='/download?file=" + filename + "'>" + filename + "</a>";
+                    html += " <span class='info'>(" + String(file.size() / 1024) + " KB)</span>";
+                    html += "</div>";
+                }
+            }
+            file = root.openNextFile();
+        }
+
+        if (!hasFiles) {
+            html += "<p class='info'>Noch keine Log-Dateien vorhanden.</p>";
+        }
+
+        html += "</div>";
+    }
+
+    html += "<h2>📊 Aktuelle Messwerte:</h2>";
+
+    if (indoorReceived) {
+        html += "<h3 style='color: #0099cc;'>🏠 Indoor</h3>";
+        html += "<p>Temperatur: " + String(indoorData.temperature, 1) + " °C<br>";
+        html += "Luftfeuchtigkeit: " + String(indoorData.humidity, 0) + " %<br>";
+        html += "Luftdruck: " + String(indoorData.pressure, 0) + " mbar<br>";
+        html += "Batterie: " + String(indoorData.battery_mv) + " mV</p>";
+    }
+
+    if (outdoorReceived) {
+        html += "<h3 style='color: #ff9900;'>🌤️ Outdoor</h3>";
+        html += "<p>Temperatur: " + String(outdoorData.temperature, 1) + " °C<br>";
+        html += "Luftdruck: " + String(outdoorData.pressure, 0) + " mbar<br>";
+        html += "Batterie: " + String(outdoorData.battery_mv) + " mV</p>";
+    }
+
+    html += "<p class='info' style='margin-top: 30px;'>Aktualisiert: " + getDateTimeString() + "</p>";
+    html += "</div></body></html>";
+
+    server.send(200, "text/html", html);
+}
+
+void handleDownload() {
+    if (!server.hasArg("file")) {
+        server.send(400, "text/plain", "Missing file parameter");
+        return;
+    }
+
+    String filename = server.arg("file");
+
+    // Sicherheit: Nur .csv Dateien erlauben
+    if (!filename.endsWith(".csv")) {
+        server.send(403, "text/plain", "Only CSV files allowed");
+        return;
+    }
+
+    // Sicherheit: Kein Pfad-Traversal
+    if (filename.indexOf("..") >= 0 || filename.indexOf("/") > 0) {
+        server.send(403, "text/plain", "Invalid filename");
+        return;
+    }
+
+    String filepath = "/" + filename;
+
+    if (!SD.exists(filepath)) {
+        server.send(404, "text/plain", "File not found");
+        return;
+    }
+
+    File file = SD.open(filepath, FILE_READ);
+    if (!file) {
+        server.send(500, "text/plain", "Failed to open file");
+        return;
+    }
+
+    server.streamFile(file, "text/csv");
+    file.close();
+}
+
+void setupWebServer() {
+    server.on("/", handleRoot);
+    server.on("/download", handleDownload);
+    server.begin();
+    Serial.println("[Web] Server started on http://" + WiFi.localIP().toString());
+}
+
 // ==================== SETUP ====================
 
 void setup() {
@@ -512,25 +799,39 @@ void setup() {
     
     // ========== WiFi Setup (optional) ==========
     setupWiFi();
-    
+
+    // ========== SD-Karte initialisieren ==========
+    sdCardAvailable = initSDCard();
+
+    // ========== Webserver starten (wenn WiFi aktiv) ==========
+    if (wifiConnected) {
+        setupWebServer();
+    }
+
     // ========== Initial Display ==========
     drawIndoorSection();
     drawOutdoorSection();
-    
+
     Serial.println("\n[READY] System running!\n");
+    if (sdCardAvailable) {
+        Serial.println("[INFO] SD-Logging aktiv - Daten werden jede Minute gespeichert");
+    }
+    if (wifiConnected) {
+        Serial.println("[INFO] Webserver erreichbar unter: http://" + WiFi.localIP().toString());
+    }
 }
 
 // ==================== MAIN LOOP ====================
 
 void loop() {
     unsigned long now = millis();
-    
+
     // I2C Daten abfragen
     if (now - lastI2CPoll >= I2C_POLL_INTERVAL) {
         lastI2CPoll = now;
         pollI2CData();
     }
-    
+
     // Display aktualisieren
     if (now - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
         lastDisplayUpdate = now;
@@ -545,12 +846,33 @@ void loop() {
             drawOutdoorSection();
         }
     }
-    
+
+    // SD-Karte: Daten loggen
+    if (sdCardAvailable && now - lastSDLog >= SD_LOG_INTERVAL) {
+        lastSDLog = now;
+
+        if (indoorReceived) {
+            logIndoorData();
+        }
+
+        if (outdoorReceived) {
+            logOutdoorData();
+        }
+    }
+
     // WiFi Reconnect (falls nicht verbunden)
     if (!wifiConnected && now - lastWiFiRetry >= WIFI_RETRY_INTERVAL) {
         lastWiFiRetry = now;
         setupWiFi();
+        if (wifiConnected) {
+            setupWebServer();
+        }
     }
-    
+
+    // Webserver verarbeiten
+    if (wifiConnected) {
+        server.handleClient();
+    }
+
     delay(10);
 }
