@@ -58,7 +58,7 @@
 #define I2C_POLL_INTERVAL 1000        // I2C alle 1 Sekunde abfragen
 #define DISPLAY_UPDATE_INTERVAL 5000  // Display-Zeit alle 5 Sekunden
 #define WIFI_RETRY_INTERVAL 30000     // WiFi-Reconnect alle 30 Sekunden
-#define SD_LOG_INTERVAL 60000         // SD-Log alle 60 Sekunden (1 Minute)
+#define SD_LOG_INTERVAL 900000        // SD-Log alle 15 Minuten (900000 ms)
 
 // ==================== INFLUXDB KONFIGURATION ====================
 // WICHTIG: Setze diese Werte in deiner Credentials.h oder hier direkt
@@ -651,7 +651,7 @@ String getCurrentDateString() {
     if (!getLocalTime(&timeinfo)) return "unknown";
 
     char dateStr[16];
-    strftime(dateStr, sizeof(dateStr), "%Y%m%d", &timeinfo);
+    strftime(dateStr, sizeof(dateStr), "%Y%m", &timeinfo);  // Nur Jahr+Monat (monatliche Dateien)
     return String(dateStr);
 }
 
@@ -949,7 +949,8 @@ void setup() {
 
     Serial.println("\n[READY] System running!\n");
     if (sdCardAvailable) {
-        Serial.println("[INFO] SD-Logging aktiv - Daten werden jede Minute gespeichert");
+        Serial.println("[INFO] SD-Logging aktiv - Daten werden alle 15 Minuten gespeichert");
+        Serial.println("[INFO] Monatliche CSV-Dateien (YYYYMM_indoor/outdoor.csv)");
     }
     if (wifiConnected) {
         Serial.println("[INFO] Webserver erreichbar unter: http://" + WiFi.localIP().toString());
