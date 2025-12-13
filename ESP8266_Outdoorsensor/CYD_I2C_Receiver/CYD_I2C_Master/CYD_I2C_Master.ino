@@ -18,6 +18,8 @@
 #include <SD.h>
 #include <SPI.h>
 #include <WebServer.h>
+#include <InfluxDbClient.h>
+#include <InfluxDbCloud.h>
 #include "I2CSensorBridge.h"
 
 // ==================== KONFIGURATION ====================
@@ -56,7 +58,38 @@
 #define I2C_POLL_INTERVAL 1000        // I2C alle 1 Sekunde abfragen
 #define DISPLAY_UPDATE_INTERVAL 5000  // Display-Zeit alle 5 Sekunden
 #define WIFI_RETRY_INTERVAL 30000     // WiFi-Reconnect alle 30 Sekunden
-#define SD_LOG_INTERVAL 60000         // SD-Log alle 60 Sekunden (1 Minute)
+#define SD_LOG_INTERVAL 900000        // SD-Log alle 15 Minuten (900000 ms)
+
+// ==================== INFLUXDB KONFIGURATION ====================
+// WICHTIG: Setze diese Werte in deiner Credentials.h oder hier direkt
+
+// InfluxDB aktivieren/deaktivieren (auskommentieren zum Deaktivieren)
+// #define ENABLE_INFLUXDB  // Auskommentiert: Nur CSV-Logging (für QNAP TS-210 ohne Container Station)
+
+#ifdef ENABLE_INFLUXDB
+  // InfluxDB v2 Server URL (z.B. http://192.168.1.100:8086)
+  #ifndef INFLUXDB_URL
+    #define INFLUXDB_URL "http://192.168.1.100:8086"
+  #endif
+
+  // InfluxDB v2 Token (wird in InfluxDB UI erstellt)
+  #ifndef INFLUXDB_TOKEN
+    #define INFLUXDB_TOKEN "dein-token-hier-eintragen"
+  #endif
+
+  // Organisation Name
+  #ifndef INFLUXDB_ORG
+    #define INFLUXDB_ORG "home"
+  #endif
+
+  // Bucket Name (wie eine Datenbank)
+  #ifndef INFLUXDB_BUCKET
+    #define INFLUXDB_BUCKET "sensors"
+  #endif
+
+  // Timezone für InfluxDB
+  #define TZ_INFO "CET-1CEST,M3.5.0,M10.5.0/3"
+#endif
 
 // ==================== DATENSTRUKTUREN ====================
 
@@ -147,6 +180,14 @@ String currentDateString = "";
 // Webserver
 WebServer server(80);
 
+// InfluxDB Client
+#ifdef ENABLE_INFLUXDB
+  InfluxDBClient influxClient(INFLUXDB_URL, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_TOKEN);
+  bool influxDBConnected = false;
+  unsigned long lastInfluxRetry = 0;
+  #define INFLUX_RETRY_INTERVAL 60000  // Retry alle 60 Sekunden
+#endif
+
 // ==================== DISPLAY FUNKTIONEN ====================
 
 uint16_t getRSSIColor(int rssi) {
@@ -192,32 +233,38 @@ void drawHeader() {
         }
     }
 
-    // WiFi Status (rechts oben)
-    lcd.setFont(&fonts::Font2);
-    lcd.setTextDatum(top_right);
-
-    if (wifiConnected) {
-        lcd.setTextColor(COLOR_RSSI_GOOD);
-        lcd.drawString("WiFi", screenWidth - 5, 5);
-    } else {
-        lcd.setTextColor(COLOR_RSSI_POOR);
-        lcd.drawString("No WiFi", screenWidth - 5, 5);
-    }
-
-    // SD-Karten Status (rechts oben, zweite Zeile)
-    if (sdCardAvailable) {
-        lcd.setTextColor(COLOR_RSSI_GOOD);
-        lcd.drawString("SD", screenWidth - 5, 20);
-    }
-
     // I2C Bridge Status (links oben)
+    lcd.setFont(&fonts::Font2);
     lcd.setTextDatum(top_left);
     if (systemStatus.esp_now_packets > 0) {
         lcd.setTextColor(COLOR_RSSI_GOOD);
-        lcd.drawString("Bridge OK", 5, 5);
+        lcd.drawString("Bridge OK", 5, 0);
     } else {
         lcd.setTextColor(COLOR_RSSI_MEDIUM);
-        lcd.drawString("Waiting...", 5, 5);
+        lcd.drawString("Waiting...", 5, 0);
+    }
+
+    // SD-Karten Status (links unten, im blauen Bereich)
+    if (sdCardAvailable) {
+        lcd.setTextColor(COLOR_RSSI_GOOD);
+        lcd.drawString("SD", 5, 20);
+    }
+
+    // WiFi Status (rechts oben)
+    lcd.setTextDatum(top_right);
+    if (wifiConnected) {
+        lcd.setTextColor(COLOR_RSSI_GOOD);
+        lcd.drawString("WiFi", screenWidth - 5, 0);
+    } else {
+        lcd.setTextColor(COLOR_RSSI_POOR);
+        lcd.drawString("No WiFi", screenWidth - 5, 0);
+    }
+
+    // IP letztes Byte anzeigen (rechts unten, im blauen Bereich)
+    if (wifiConnected) {
+        IPAddress ip = WiFi.localIP();
+        lcd.setTextColor(COLOR_RSSI_GOOD);
+        lcd.drawString(String(ip[3]), screenWidth - 5, 20);  // Letztes Byte der IP
     }
 }
 
@@ -478,6 +525,87 @@ void setupWiFi() {
     }
 }
 
+// ==================== INFLUXDB FUNKTIONEN ====================
+
+#ifdef ENABLE_INFLUXDB
+
+bool setupInfluxDB() {
+    Serial.println("\n[InfluxDB] Initializing...");
+
+    // Timezone setzen
+    influxClient.setConnectionParamsV1(INFLUXDB_URL, INFLUXDB_BUCKET, INFLUXDB_ORG, INFLUXDB_TOKEN);
+
+    // Server-Validierung
+    if (influxClient.validateConnection()) {
+        Serial.print("[InfluxDB] Connected to: ");
+        Serial.println(influxClient.getServerUrl());
+        return true;
+    } else {
+        Serial.print("[InfluxDB] Connection failed: ");
+        Serial.println(influxClient.getLastErrorMessage());
+        return false;
+    }
+}
+
+void sendIndoorToInfluxDB() {
+    if (!wifiConnected || !influxDBConnected || !indoorReceived) return;
+
+    // Data Point erstellen
+    Point indoorPoint("indoor_sensor");
+
+    // Tags (für Filterung/Gruppierung)
+    indoorPoint.addTag("device", "CYD_Master");
+    indoorPoint.addTag("location", "indoor");
+    indoorPoint.addTag("sensor_type", "ESP8266");
+
+    // Fields (die eigentlichen Messwerte)
+    indoorPoint.addField("temperature", indoorData.temperature);
+    indoorPoint.addField("humidity", indoorData.humidity);
+    indoorPoint.addField("pressure", indoorData.pressure);
+    indoorPoint.addField("battery_mv", (int)indoorData.battery_mv);
+    indoorPoint.addField("rssi", (int)indoorData.rssi);
+    indoorPoint.addField("battery_warning", indoorData.battery_warning ? 1 : 0);
+    indoorPoint.addField("sleep_time_sec", (int)indoorData.sleep_time_sec);
+
+    // Daten senden
+    if (!influxClient.writePoint(indoorPoint)) {
+        Serial.print("[InfluxDB] Write Indoor failed: ");
+        Serial.println(influxClient.getLastErrorMessage());
+    } else {
+        Serial.println("[InfluxDB] Indoor data written");
+    }
+}
+
+void sendOutdoorToInfluxDB() {
+    if (!wifiConnected || !influxDBConnected || !outdoorReceived) return;
+
+    // Data Point erstellen
+    Point outdoorPoint("outdoor_sensor");
+
+    // Tags
+    outdoorPoint.addTag("device", "CYD_Master");
+    outdoorPoint.addTag("location", "outdoor");
+    outdoorPoint.addTag("sensor_type", "ESP8266");
+
+    // Fields
+    outdoorPoint.addField("temperature", outdoorData.temperature);
+    outdoorPoint.addField("pressure", outdoorData.pressure);
+    outdoorPoint.addField("battery_mv", (int)outdoorData.battery_mv);
+    outdoorPoint.addField("rssi", (int)outdoorData.rssi);
+    outdoorPoint.addField("battery_warning", outdoorData.battery_warning ? 1 : 0);
+    outdoorPoint.addField("sleep_time_sec", (int)outdoorData.sleep_time_sec);
+
+    // Daten senden
+    if (!influxClient.writePoint(outdoorPoint)) {
+        Serial.print("[InfluxDB] Write Outdoor failed: ");
+        Serial.println(influxClient.getLastErrorMessage());
+    } else {
+        Serial.println("[InfluxDB] Outdoor data written");
+    }
+}
+
+#endif
+
 // ==================== SD-KARTE FUNKTIONEN ====================
 
 bool initSDCard() {
@@ -523,7 +651,7 @@ String getCurrentDateString() {
     if (!getLocalTime(&timeinfo)) return "unknown";
 
     char dateStr[16];
-    strftime(dateStr, sizeof(dateStr), "%Y%m%d", &timeinfo);
+    strftime(dateStr, sizeof(dateStr), "%Y%m", &timeinfo);  // Nur Jahr+Monat (monatliche Dateien)
     return String(dateStr);
 }
 
@@ -803,6 +931,13 @@ void setup() {
     // ========== SD-Karte initialisieren ==========
     sdCardAvailable = initSDCard();
 
+    // ========== InfluxDB initialisieren (wenn WiFi aktiv) ==========
+    #ifdef ENABLE_INFLUXDB
+    if (wifiConnected) {
+        influxDBConnected = setupInfluxDB();
+    }
+    #endif
+
     // ========== Webserver starten (wenn WiFi aktiv) ==========
     if (wifiConnected) {
         setupWebServer();
@@ -814,11 +949,17 @@ void setup() {
 
     Serial.println("\n[READY] System running!\n");
     if (sdCardAvailable) {
-        Serial.println("[INFO] SD-Logging aktiv - Daten werden jede Minute gespeichert");
+        Serial.println("[INFO] SD-Logging aktiv - Daten werden alle 15 Minuten gespeichert");
+        Serial.println("[INFO] Monatliche CSV-Dateien (YYYYMM_indoor/outdoor.csv)");
     }
     if (wifiConnected) {
         Serial.println("[INFO] Webserver erreichbar unter: http://" + WiFi.localIP().toString());
     }
+    #ifdef ENABLE_INFLUXDB
+    if (influxDBConnected) {
+        Serial.println("[INFO] InfluxDB aktiv - Daten werden parallel zu CSV gesendet");
+    }
+    #endif
 }
 
 // ==================== MAIN LOOP ====================
@@ -858,7 +999,28 @@ void loop() {
         if (outdoorReceived) {
             logOutdoorData();
         }
+
+        // InfluxDB: Parallel zu SD-Karte senden
+        #ifdef ENABLE_INFLUXDB
+        if (influxDBConnected) {
+            if (indoorReceived) {
+                sendIndoorToInfluxDB();
+            }
+            if (outdoorReceived) {
+                sendOutdoorToInfluxDB();
+            }
+        }
+        #endif
     }
+
+    // InfluxDB Reconnect (falls nicht verbunden aber WiFi aktiv)
+    #ifdef ENABLE_INFLUXDB
+    if (wifiConnected && !influxDBConnected && now - lastInfluxRetry >= INFLUX_RETRY_INTERVAL) {
+        lastInfluxRetry = now;
+        Serial.println("[InfluxDB] Retry connection...");
+        influxDBConnected = setupInfluxDB();
+    }
+    #endif
 
     // WiFi Reconnect (falls nicht verbunden)
     if (!wifiConnected && now - lastWiFiRetry >= WIFI_RETRY_INTERVAL) {
@@ -866,6 +1028,9 @@ void loop() {
         setupWiFi();
         if (wifiConnected) {
             setupWebServer();
+            #ifdef ENABLE_INFLUXDB
+            influxDBConnected = setupInfluxDB();
+            #endif
         }
     }
 
