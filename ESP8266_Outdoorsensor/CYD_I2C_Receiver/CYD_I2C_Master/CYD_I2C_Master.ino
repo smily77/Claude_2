@@ -139,6 +139,21 @@ struct SystemStatus {
 #define COLOR_RSSI_MEDIUM 0x6800   // Orange
 #define COLOR_RSSI_POOR   0x6000   // Dunkelrot
 
+// ==================== MIN/MAX TRACKING ====================
+
+// Struktur für Min/Max-Werte
+struct MinMaxData {
+    float tempMin;
+    float tempMax;
+    float humMin;           // nur Indoor
+    float humMax;           // nur Indoor
+    float pressMin;
+    float pressMax;
+    uint16_t batteryMin;
+    uint16_t batteryMax;
+    unsigned long lastReset;  // Zeitstempel des letzten Resets
+};
+
 // ==================== GLOBALE VARIABLEN ====================
 
 // Display
@@ -149,6 +164,11 @@ int screenWidth = 320;
 int screenHeight = 240;
 bool is480p = false;
 
+// Display Mode
+bool showMinMax = false;       // false = Normal, true = Min/Max
+unsigned long lastTouchTime = 0;
+const unsigned long TOUCH_DEBOUNCE = 300;  // 300ms Debounce
+
 // I2C Bridge
 I2CSensorBridge i2cBridge;
 
@@ -156,6 +176,10 @@ I2CSensorBridge i2cBridge;
 IndoorData indoorData;
 OutdoorData outdoorData;
 SystemStatus systemStatus;
+
+// Min/Max Tracking
+MinMaxData indoorMinMax;
+MinMaxData outdoorMinMax;
 
 // Status
 bool indoorReceived = false;
@@ -442,6 +466,247 @@ void drawOutdoorSection() {
     outdoorSprite.pushSprite(boxX + 2, spriteY);
 }
 
+// ==================== MIN/MAX FUNKTIONEN ====================
+
+void initMinMax(MinMaxData &minmax) {
+    minmax.tempMin = 999.0;
+    minmax.tempMax = -999.0;
+    minmax.humMin = 999.0;
+    minmax.humMax = -999.0;
+    minmax.pressMin = 9999.0;
+    minmax.pressMax = 0.0;
+    minmax.batteryMin = 65535;
+    minmax.batteryMax = 0;
+    minmax.lastReset = millis();
+}
+
+void updateIndoorMinMax() {
+    if (!indoorReceived) return;
+
+    // Prüfen ob 24h vergangen sind
+    if (millis() - indoorMinMax.lastReset > 86400000UL) {  // 24h in ms
+        initMinMax(indoorMinMax);
+    }
+
+    // Min/Max aktualisieren
+    if (indoorData.temperature < indoorMinMax.tempMin) indoorMinMax.tempMin = indoorData.temperature;
+    if (indoorData.temperature > indoorMinMax.tempMax) indoorMinMax.tempMax = indoorData.temperature;
+
+    if (indoorData.humidity < indoorMinMax.humMin) indoorMinMax.humMin = indoorData.humidity;
+    if (indoorData.humidity > indoorMinMax.humMax) indoorMinMax.humMax = indoorData.humidity;
+
+    if (indoorData.pressure < indoorMinMax.pressMin) indoorMinMax.pressMin = indoorData.pressure;
+    if (indoorData.pressure > indoorMinMax.pressMax) indoorMinMax.pressMax = indoorData.pressure;
+
+    if (indoorData.battery_mv < indoorMinMax.batteryMin) indoorMinMax.batteryMin = indoorData.battery_mv;
+    if (indoorData.battery_mv > indoorMinMax.batteryMax) indoorMinMax.batteryMax = indoorData.battery_mv;
+}
+
+void updateOutdoorMinMax() {
+    if (!outdoorReceived) return;
+
+    // Prüfen ob 24h vergangen sind
+    if (millis() - outdoorMinMax.lastReset > 86400000UL) {  // 24h in ms
+        initMinMax(outdoorMinMax);
+    }
+
+    // Min/Max aktualisieren
+    if (outdoorData.temperature < outdoorMinMax.tempMin) outdoorMinMax.tempMin = outdoorData.temperature;
+    if (outdoorData.temperature > outdoorMinMax.tempMax) outdoorMinMax.tempMax = outdoorData.temperature;
+
+    if (outdoorData.pressure < outdoorMinMax.pressMin) outdoorMinMax.pressMin = outdoorData.pressure;
+    if (outdoorData.pressure > outdoorMinMax.pressMax) outdoorMinMax.pressMax = outdoorData.pressure;
+
+    if (outdoorData.battery_mv < outdoorMinMax.batteryMin) outdoorMinMax.batteryMin = outdoorData.battery_mv;
+    if (outdoorData.battery_mv > outdoorMinMax.batteryMax) outdoorMinMax.batteryMax = outdoorData.battery_mv;
+}
+
+// ==================== MIN/MAX DISPLAY FUNKTIONEN ====================
+
+void drawIndoorMinMaxSection() {
+    int boxX = 5;
+    int boxY = is480p ? 70 : 55;
+    int boxW = screenWidth / 2 - 10;
+    int boxH = screenHeight - boxY - 5;
+
+    drawSensorBox(boxX, boxY, boxW, boxH, "INDOOR (24h)", COLOR_INDOOR);
+
+    int titleHeight = 42;
+    int spriteY = boxY + titleHeight;
+    int spriteW = boxW - 4;
+    int spriteH = boxH - titleHeight - 2;
+
+    indoorSprite.fillSprite(COLOR_BG);
+
+    if (!indoorReceived || indoorMinMax.tempMin > 900) {
+        indoorSprite.setFont(&fonts::FreeSans9pt7b);
+        indoorSprite.setTextColor(COLOR_TEXT_DIM);
+        indoorSprite.setTextDatum(middle_center);
+        indoorSprite.drawString("No data yet", spriteW / 2, spriteH / 2);
+        indoorSprite.pushSprite(boxX + 2, spriteY);
+        return;
+    }
+
+    int contentY = 10;
+    int lineHeight = is480p ? 30 : 23;
+    int leftX = 5;
+    int rightX = spriteW - 5;
+
+    // Temperatur Min/Max
+    indoorSprite.setFont(is480p ? &fonts::FreeSansBold12pt7b : &fonts::FreeSans9pt7b);
+    indoorSprite.setTextColor(COLOR_TEMP);
+    indoorSprite.setTextDatum(top_left);
+    indoorSprite.drawString("Temp:", leftX, contentY);
+    indoorSprite.setTextDatum(top_right);
+    char tempStr[32];
+    snprintf(tempStr, sizeof(tempStr), "%.1f/%.1f C", indoorMinMax.tempMin, indoorMinMax.tempMax);
+    indoorSprite.drawString(tempStr, rightX, contentY);
+    contentY += lineHeight;
+
+    // Luftfeuchtigkeit Min/Max
+    indoorSprite.setTextColor(COLOR_HUM);
+    indoorSprite.setTextDatum(top_left);
+    indoorSprite.drawString("Hum:", leftX, contentY);
+    indoorSprite.setTextDatum(top_right);
+    char humStr[32];
+    snprintf(humStr, sizeof(humStr), "%.0f/%.0f %%", indoorMinMax.humMin, indoorMinMax.humMax);
+    indoorSprite.drawString(humStr, rightX, contentY);
+    contentY += lineHeight;
+
+    // Luftdruck Min/Max
+    indoorSprite.setTextColor(COLOR_PRESS);
+    indoorSprite.setTextDatum(top_left);
+    indoorSprite.drawString("Press:", leftX, contentY);
+    indoorSprite.setTextDatum(top_right);
+    char pressStr[32];
+    snprintf(pressStr, sizeof(pressStr), "%.0f/%.0f", indoorMinMax.pressMin, indoorMinMax.pressMax);
+    indoorSprite.drawString(pressStr, rightX, contentY);
+    contentY += lineHeight;
+
+    // Batterie Min/Max
+    indoorSprite.setTextColor(COLOR_BATTERY_OK);
+    indoorSprite.setTextDatum(top_left);
+    indoorSprite.drawString("Batt:", leftX, contentY);
+    indoorSprite.setTextDatum(top_right);
+    char battStr[32];
+    snprintf(battStr, sizeof(battStr), "%d/%d mV", indoorMinMax.batteryMin, indoorMinMax.batteryMax);
+    indoorSprite.drawString(battStr, rightX, contentY);
+    contentY += lineHeight + 10;
+
+    // Info-Text
+    indoorSprite.setFont(&fonts::Font2);
+    indoorSprite.setTextColor(COLOR_TEXT_DIM);
+    indoorSprite.setTextDatum(middle_center);
+    indoorSprite.drawString("Min/Max (24h)", spriteW / 2, contentY);
+
+    indoorSprite.pushSprite(boxX + 2, spriteY);
+}
+
+void drawOutdoorMinMaxSection() {
+    int boxX = screenWidth / 2 + 5;
+    int boxY = is480p ? 70 : 55;
+    int boxW = screenWidth / 2 - 10;
+    int boxH = screenHeight - boxY - 5;
+
+    drawSensorBox(boxX, boxY, boxW, boxH, "OUTDOOR (24h)", COLOR_OUTDOOR);
+
+    int titleHeight = 42;
+    int spriteY = boxY + titleHeight;
+    int spriteW = boxW - 4;
+    int spriteH = boxH - titleHeight - 2;
+
+    outdoorSprite.fillSprite(COLOR_BG);
+
+    if (!outdoorReceived || outdoorMinMax.tempMin > 900) {
+        outdoorSprite.setFont(&fonts::FreeSans9pt7b);
+        outdoorSprite.setTextColor(COLOR_TEXT_DIM);
+        outdoorSprite.setTextDatum(middle_center);
+        outdoorSprite.drawString("No data yet", spriteW / 2, spriteH / 2);
+        outdoorSprite.pushSprite(boxX + 2, spriteY);
+        return;
+    }
+
+    int contentY = 10;
+    int lineHeight = is480p ? 30 : 23;
+    int leftX = 5;
+    int rightX = spriteW - 5;
+
+    // Temperatur Min/Max
+    outdoorSprite.setFont(is480p ? &fonts::FreeSansBold12pt7b : &fonts::FreeSans9pt7b);
+    outdoorSprite.setTextColor(COLOR_TEMP);
+    outdoorSprite.setTextDatum(top_left);
+    outdoorSprite.drawString("Temp:", leftX, contentY);
+    outdoorSprite.setTextDatum(top_right);
+    char tempStr[32];
+    snprintf(tempStr, sizeof(tempStr), "%.1f/%.1f C", outdoorMinMax.tempMin, outdoorMinMax.tempMax);
+    outdoorSprite.drawString(tempStr, rightX, contentY);
+    contentY += lineHeight;
+
+    // Keine Luftfeuchtigkeit für Outdoor
+    outdoorSprite.setTextColor(COLOR_TEXT_DIM);
+    outdoorSprite.setTextDatum(middle_center);
+    outdoorSprite.drawString("(no humidity)", spriteW / 2, contentY);
+    contentY += lineHeight;
+
+    // Luftdruck Min/Max
+    outdoorSprite.setTextColor(COLOR_PRESS);
+    outdoorSprite.setTextDatum(top_left);
+    outdoorSprite.drawString("Press:", leftX, contentY);
+    outdoorSprite.setTextDatum(top_right);
+    char pressStr[32];
+    snprintf(pressStr, sizeof(pressStr), "%.0f/%.0f", outdoorMinMax.pressMin, outdoorMinMax.pressMax);
+    outdoorSprite.drawString(pressStr, rightX, contentY);
+    contentY += lineHeight;
+
+    // Batterie Min/Max
+    outdoorSprite.setTextColor(COLOR_BATTERY_OK);
+    outdoorSprite.setTextDatum(top_left);
+    outdoorSprite.drawString("Batt:", leftX, contentY);
+    outdoorSprite.setTextDatum(top_right);
+    char battStr[32];
+    snprintf(battStr, sizeof(battStr), "%d/%d mV", outdoorMinMax.batteryMin, outdoorMinMax.batteryMax);
+    outdoorSprite.drawString(battStr, rightX, contentY);
+    contentY += lineHeight + 10;
+
+    // Info-Text
+    outdoorSprite.setFont(&fonts::Font2);
+    outdoorSprite.setTextColor(COLOR_TEXT_DIM);
+    outdoorSprite.setTextDatum(middle_center);
+    outdoorSprite.drawString("Min/Max (24h)", spriteW / 2, contentY);
+
+    outdoorSprite.pushSprite(boxX + 2, spriteY);
+}
+
+// ==================== TOUCH FUNKTIONEN ====================
+
+void checkTouch() {
+    uint16_t touchX, touchY;
+
+    if (lcd.getTouch(&touchX, &touchY)) {
+        // Debounce
+        if (millis() - lastTouchTime > TOUCH_DEBOUNCE) {
+            lastTouchTime = millis();
+
+            // Display-Modus umschalten
+            showMinMax = !showMinMax;
+
+            Serial.printf("[Touch] Display mode: %s\n", showMinMax ? "Min/Max" : "Normal");
+
+            // Display sofort aktualisieren
+            lcd.fillScreen(COLOR_BG);
+            drawHeader();
+
+            if (showMinMax) {
+                drawIndoorMinMaxSection();
+                drawOutdoorMinMaxSection();
+            } else {
+                drawIndoorSection();
+                drawOutdoorSection();
+            }
+        }
+    }
+}
+
 // ==================== I2C FUNKTIONEN ====================
 
 void pollI2CData() {
@@ -465,18 +730,24 @@ void pollI2CData() {
         if (i2cBridge.readStruct(BRIDGE_ADDRESS_1, 0x01, indoorData)) {
             indoorReceived = true;
             lastIndoorUpdate = millis();
-            
+
+            // Min/Max aktualisieren
+            updateIndoorMinMax();
+
             Serial.printf("[Indoor] Temp: %.1f°C, Hum: %.1f%%, Press: %.0f mbar\n",
                          indoorData.temperature, indoorData.humidity, indoorData.pressure);
         }
     }
-    
+
     // Outdoor Daten (ID 0x02)
     if (newDataMask & 0x04) {  // Bit 2 für ID 0x02
         if (i2cBridge.readStruct(BRIDGE_ADDRESS_1, 0x02, outdoorData)) {
             outdoorReceived = true;
             lastOutdoorUpdate = millis();
-            
+
+            // Min/Max aktualisieren
+            updateOutdoorMinMax();
+
             Serial.printf("[Outdoor] Temp: %.1f°C, Press: %.0f mbar\n",
                          outdoorData.temperature, outdoorData.pressure);
         }
@@ -928,6 +1199,11 @@ void setup() {
     // ========== WiFi Setup (optional) ==========
     setupWiFi();
 
+    // ========== Min/Max Tracking initialisieren ==========
+    Serial.println("\n[MinMax] Initializing tracking...");
+    initMinMax(indoorMinMax);
+    initMinMax(outdoorMinMax);
+
     // ========== SD-Karte initialisieren ==========
     sdCardAvailable = initSDCard();
 
@@ -967,6 +1243,9 @@ void setup() {
 void loop() {
     unsigned long now = millis();
 
+    // Touch prüfen (für Display-Modus-Wechsel)
+    checkTouch();
+
     // I2C Daten abfragen
     if (now - lastI2CPoll >= I2C_POLL_INTERVAL) {
         lastI2CPoll = now;
@@ -979,12 +1258,19 @@ void loop() {
 
         drawHeader();
 
-        if (indoorReceived) {
-            drawIndoorSection();
-        }
+        if (showMinMax) {
+            // Min/Max Ansicht
+            drawIndoorMinMaxSection();
+            drawOutdoorMinMaxSection();
+        } else {
+            // Normale Ansicht
+            if (indoorReceived) {
+                drawIndoorSection();
+            }
 
-        if (outdoorReceived) {
-            drawOutdoorSection();
+            if (outdoorReceived) {
+                drawOutdoorSection();
+            }
         }
     }
 
