@@ -64,7 +64,7 @@
 // WICHTIG: Setze diese Werte in deiner Credentials.h oder hier direkt
 
 // InfluxDB aktivieren/deaktivieren (auskommentieren zum Deaktivieren)
-#define ENABLE_INFLUXDB
+// #define ENABLE_INFLUXDB  // Auskommentiert: Nur CSV-Logging (für QNAP TS-210 ohne Container Station)
 
 #ifdef ENABLE_INFLUXDB
   // InfluxDB v2 Server URL (z.B. http://192.168.1.100:8086)

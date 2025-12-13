@@ -1,6 +1,16 @@
-# InfluxDB + Grafana Setup für QNAP TS-210
+# InfluxDB + Grafana Setup für ESP32 Sensor-Logging
 
-Komplette Anleitung zum Einrichten der Datenbank für ESP32 Sensor-Logging.
+⚠️ **WICHTIG: QNAP TS-210 wird NICHT unterstützt!**
+
+Die **TS-210** ist zu alt für Container Station. Siehe `ALTERNATIVEN.md` für:
+- CSV-Only Lösung (bereits fertig!)
+- InfluxDB Cloud (kostenlos)
+- Raspberry Pi Setup
+- Alter PC als Server
+
+---
+
+Komplette Anleitung zum Einrichten der Datenbank auf **neueren QNAP Modellen** (mit Container Station Support).
 
 ## 📋 Übersicht
 
