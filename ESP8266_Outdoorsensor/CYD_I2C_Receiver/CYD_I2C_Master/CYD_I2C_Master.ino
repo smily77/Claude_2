@@ -139,6 +139,11 @@ struct SystemStatus {
 #define COLOR_RSSI_MEDIUM 0x6800   // Orange
 #define COLOR_RSSI_POOR   0x6000   // Dunkelrot
 
+// Touch Debug
+#ifndef TFT_RED
+#define TFT_RED           0xF800   // Rot für Touch-Debug
+#endif
+
 // ==================== MIN/MAX TRACKING ====================
 
 // Struktur für Min/Max-Werte
@@ -680,9 +685,27 @@ void drawOutdoorMinMaxSection() {
 // ==================== TOUCH FUNKTIONEN ====================
 
 void checkTouch() {
+    static unsigned long lastDebugPrint = 0;
     uint16_t touchX, touchY;
+    bool touched = false;
 
+    // Touch prüfen - getTouch() gibt true zurück wenn Touch erkannt wurde
     if (lcd.getTouch(&touchX, &touchY)) {
+        touched = true;
+    }
+
+    // Debug: Alle 5 Sekunden Status ausgeben
+    if (millis() - lastDebugPrint > 5000) {
+        lastDebugPrint = millis();
+        Serial.printf("[Touch] Status check - Current mode: %s\n", showMinMax ? "Min/Max" : "Normal");
+    }
+
+    if (touched) {
+        // Debug: Roten Kreis an Touch-Position zeichnen
+        lcd.fillCircle(touchX, touchY, 15, TFT_RED);
+
+        Serial.printf("[Touch] *** DETECTED *** at X=%d, Y=%d\n", touchX, touchY);
+
         // Debounce
         if (millis() - lastTouchTime > TOUCH_DEBOUNCE) {
             lastTouchTime = millis();
@@ -690,7 +713,10 @@ void checkTouch() {
             // Display-Modus umschalten
             showMinMax = !showMinMax;
 
-            Serial.printf("[Touch] Display mode: %s\n", showMinMax ? "Min/Max" : "Normal");
+            Serial.printf("[Touch] *** MODE SWITCHED *** to: %s\n", showMinMax ? "Min/Max" : "Normal");
+
+            // Kurz warten damit der rote Kreis sichtbar ist
+            delay(200);
 
             // Display sofort aktualisieren
             lcd.fillScreen(COLOR_BG);
@@ -703,6 +729,8 @@ void checkTouch() {
                 drawIndoorSection();
                 drawOutdoorSection();
             }
+        } else {
+            Serial.printf("[Touch] Ignored (debounce), time since last: %lu ms\n", millis() - lastTouchTime);
         }
     }
 }
@@ -1154,12 +1182,18 @@ void setup() {
     lcd.init();
     lcd.setRotation(DISPLAY_ROTATION);
     lcd.setBrightness(128);
-    
+
+    // Touch kalibrieren (falls noch nicht kalibriert)
+    // Für CYD kann eine Standard-Kalibrierung nötig sein
+    uint16_t calData[8] = {239, 3926, 233, 265, 3856, 3896, 3714, 3815};
+    lcd.setTouchCalibrate(calData);
+
     screenWidth = lcd.width();
     screenHeight = lcd.height();
     is480p = (screenWidth == 480 || screenHeight == 480);
-    
+
     Serial.printf("[Display] Size: %dx%d\n", screenWidth, screenHeight);
+    Serial.println("[Touch] Touch calibrated and ready");
     
     lcd.fillScreen(COLOR_BG);
     drawHeader();
@@ -1244,6 +1278,7 @@ void loop() {
     unsigned long now = millis();
 
     // Touch prüfen (für Display-Modus-Wechsel)
+    // Diese Funktion wird bei jedem Loop-Durchlauf aufgerufen
     checkTouch();
 
     // I2C Daten abfragen
