@@ -847,17 +847,21 @@ bool initSDCard() {
     Serial.println("\n[SD] Initializing SD Card...");
 
     // SPI für SD-Karte initialisieren
+    Serial.printf("[SD] SPI Pins: SCK=%d, MISO=%d, MOSI=%d, CS=%d\n", SD_SCK, SD_MISO, SD_MOSI, SD_CS);
     SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
 
+    Serial.println("[SD] Calling SD.begin()...");
     if (!SD.begin(SD_CS)) {
-        Serial.println("[SD] No SD Card found or initialization failed");
+        Serial.println("[SD] ERROR: No SD Card found or initialization failed");
+        Serial.println("[SD] Check: 1) Card inserted? 2) Wiring correct? 3) Card formatted as FAT32?");
         return false;
     }
 
+    Serial.println("[SD] SD.begin() successful");
     uint8_t cardType = SD.cardType();
 
     if (cardType == CARD_NONE) {
-        Serial.println("[SD] No SD card attached");
+        Serial.println("[SD] ERROR: No SD card attached (cardType == CARD_NONE)");
         return false;
     }
 
@@ -875,6 +879,7 @@ bool initSDCard() {
     uint64_t cardSize = SD.cardSize() / (1024 * 1024);
     Serial.printf("[SD] Card Size: %llu MB\n", cardSize);
     Serial.printf("[SD] Used Space: %llu MB\n", SD.usedBytes() / (1024 * 1024));
+    Serial.println("[SD] SD Card successfully initialized!");
 
     return true;
 }
