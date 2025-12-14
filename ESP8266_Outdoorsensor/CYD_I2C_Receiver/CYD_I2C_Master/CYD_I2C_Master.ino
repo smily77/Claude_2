@@ -168,9 +168,20 @@ int screenHeight = 240;
 bool is480p = false;
 
 // Display Mode
-bool showMinMax = false;       // false = Normal, true = Min/Max
+uint8_t displayMode = 0;       // 0 = Normal, 1 = Min/Max, 2 = Graph
 unsigned long lastTouchTime = 0;
+unsigned long lastModeChange = 0;
 const unsigned long TOUCH_DEBOUNCE = 300;  // 300ms Debounce
+const unsigned long AUTO_RETURN_TIME = 30000;  // 30s Auto-Return zu Schirm 1
+
+// Graph Daten (240 Messwerte für Outdoor)
+#define GRAPH_DATA_POINTS 240
+struct GraphData {
+    float tempValues[GRAPH_DATA_POINTS];
+    float pressValues[GRAPH_DATA_POINTS];
+    uint16_t dataCount;  // Anzahl gültiger Datenpunkte
+    bool dataLoaded;
+} outdoorGraph;
 
 // I2C Bridge
 I2CSensorBridge i2cBridge;
@@ -640,6 +651,180 @@ void drawOutdoorMinMaxSection() {
     outdoorSprite.pushSprite(boxX + 2, spriteY);
 }
 
+// ==================== GRAPH FUNKTIONEN ====================
+
+void loadGraphDataFromCSV() {
+    if (!sdCardAvailable) {
+        Serial.println("[Graph] SD card not available");
+        outdoorGraph.dataLoaded = false;
+        return;
+    }
+
+    String dateStr = getCurrentDateString();
+    if (dateStr == "unknown") {
+        Serial.println("[Graph] No valid time for file selection");
+        outdoorGraph.dataLoaded = false;
+        return;
+    }
+
+    String filename = "/" + dateStr + "_outdoor.csv";
+
+    if (!SD.exists(filename)) {
+        Serial.printf("[Graph] File not found: %s\n", filename.c_str());
+        outdoorGraph.dataLoaded = false;
+        return;
+    }
+
+    File file = SD.open(filename, FILE_READ);
+    if (!file) {
+        Serial.println("[Graph] Failed to open file");
+        outdoorGraph.dataLoaded = false;
+        return;
+    }
+
+    // Header überspringen
+    file.readStringUntil('\n');
+
+    // Alle Zeilen in temporärem Array sammeln
+    const int MAX_LINES = 1000;
+    float* tempData = (float*)malloc(MAX_LINES * sizeof(float));
+    float* pressData = (float*)malloc(MAX_LINES * sizeof(float));
+    int lineCount = 0;
+
+    while (file.available() && lineCount < MAX_LINES) {
+        String line = file.readStringUntil('\n');
+
+        // Parse CSV: DateTime,Temperature_C,Pressure_mbar,Battery_mV,RSSI_dBm,Battery_Warning,Sleep_Time_sec
+        int idx1 = line.indexOf(',');  // Nach DateTime
+        int idx2 = line.indexOf(',', idx1 + 1);  // Nach Temperature
+        int idx3 = line.indexOf(',', idx2 + 1);  // Nach Pressure
+
+        if (idx1 > 0 && idx2 > 0 && idx3 > 0) {
+            tempData[lineCount] = line.substring(idx1 + 1, idx2).toFloat();
+            pressData[lineCount] = line.substring(idx2 + 1, idx3).toFloat();
+            lineCount++;
+        }
+    }
+    file.close();
+
+    // Die letzten 240 Werte nehmen (oder weniger wenn nicht so viele vorhanden)
+    int startIdx = (lineCount > GRAPH_DATA_POINTS) ? (lineCount - GRAPH_DATA_POINTS) : 0;
+    outdoorGraph.dataCount = lineCount - startIdx;
+
+    for (int i = 0; i < outdoorGraph.dataCount; i++) {
+        outdoorGraph.tempValues[i] = tempData[startIdx + i];
+        outdoorGraph.pressValues[i] = pressData[startIdx + i];
+    }
+
+    free(tempData);
+    free(pressData);
+
+    outdoorGraph.dataLoaded = true;
+    Serial.printf("[Graph] Loaded %d data points from %s\n", outdoorGraph.dataCount, filename.c_str());
+}
+
+void drawGraphSection() {
+    lcd.fillScreen(COLOR_BG);
+
+    // Header mit Titel
+    lcd.setFont(&fonts::FreeSansBold12pt7b);
+    lcd.setTextColor(COLOR_OUTDOOR);
+    lcd.setTextDatum(top_center);
+    lcd.drawString("OUTDOOR - Last 240 Values", screenWidth / 2, 5);
+
+    if (!outdoorGraph.dataLoaded || outdoorGraph.dataCount < 2) {
+        lcd.setFont(&fonts::FreeSans9pt7b);
+        lcd.setTextColor(COLOR_TEXT_DIM);
+        lcd.drawString("No data available", screenWidth / 2, screenHeight / 2);
+        return;
+    }
+
+    // Graph-Bereich definieren
+    int graphX = 40;
+    int graphY = 35;
+    int graphW = screenWidth - 50;
+    int graphH = (screenHeight - 45) / 2;  // Zwei Graphen übereinander
+
+    // ==== TEMPERATUR GRAPH ====
+    // Min/Max finden
+    float tempMin = outdoorGraph.tempValues[0];
+    float tempMax = outdoorGraph.tempValues[0];
+    for (int i = 1; i < outdoorGraph.dataCount; i++) {
+        if (outdoorGraph.tempValues[i] < tempMin) tempMin = outdoorGraph.tempValues[i];
+        if (outdoorGraph.tempValues[i] > tempMax) tempMax = outdoorGraph.tempValues[i];
+    }
+
+    // Etwas Margin für bessere Darstellung
+    float tempRange = tempMax - tempMin;
+    if (tempRange < 1.0) tempRange = 1.0;  // Minimum Range
+    tempMin -= tempRange * 0.1;
+    tempMax += tempRange * 0.1;
+
+    // Rahmen
+    lcd.drawRect(graphX, graphY, graphW, graphH, COLOR_TEMP);
+
+    // Y-Achsen Beschriftung (links)
+    lcd.setFont(&fonts::Font2);
+    lcd.setTextColor(COLOR_TEMP);
+    lcd.setTextDatum(middle_right);
+    lcd.drawString(String(tempMax, 1), graphX - 3, graphY + 5);
+    lcd.drawString(String(tempMin, 1), graphX - 3, graphY + graphH - 5);
+    lcd.drawString("C", graphX - 3, graphY + graphH / 2);
+
+    // Kurve zeichnen
+    lcd.setColor(COLOR_TEMP);
+    for (int i = 1; i < outdoorGraph.dataCount; i++) {
+        int x1 = graphX + (i - 1) * graphW / (outdoorGraph.dataCount - 1);
+        int x2 = graphX + i * graphW / (outdoorGraph.dataCount - 1);
+        int y1 = graphY + graphH - (int)((outdoorGraph.tempValues[i - 1] - tempMin) / (tempMax - tempMin) * graphH);
+        int y2 = graphY + graphH - (int)((outdoorGraph.tempValues[i] - tempMin) / (tempMax - tempMin) * graphH);
+        lcd.drawLine(x1, y1, x2, y2);
+    }
+
+    // ==== LUFTDRUCK GRAPH ====
+    int pressGraphY = graphY + graphH + 10;
+
+    // Min/Max finden
+    float pressMin = outdoorGraph.pressValues[0];
+    float pressMax = outdoorGraph.pressValues[0];
+    for (int i = 1; i < outdoorGraph.dataCount; i++) {
+        if (outdoorGraph.pressValues[i] < pressMin) pressMin = outdoorGraph.pressValues[i];
+        if (outdoorGraph.pressValues[i] > pressMax) pressMax = outdoorGraph.pressValues[i];
+    }
+
+    // Margin
+    float pressRange = pressMax - pressMin;
+    if (pressRange < 5.0) pressRange = 5.0;  // Minimum Range
+    pressMin -= pressRange * 0.1;
+    pressMax += pressRange * 0.1;
+
+    // Rahmen
+    lcd.drawRect(graphX, pressGraphY, graphW, graphH, COLOR_PRESS);
+
+    // Y-Achsen Beschriftung
+    lcd.setTextColor(COLOR_PRESS);
+    lcd.setTextDatum(middle_right);
+    lcd.drawString(String((int)pressMax), graphX - 3, pressGraphY + 5);
+    lcd.drawString(String((int)pressMin), graphX - 3, pressGraphY + graphH - 5);
+    lcd.drawString("mbar", graphX - 3, pressGraphY + graphH / 2);
+
+    // Kurve zeichnen
+    lcd.setColor(COLOR_PRESS);
+    for (int i = 1; i < outdoorGraph.dataCount; i++) {
+        int x1 = graphX + (i - 1) * graphW / (outdoorGraph.dataCount - 1);
+        int x2 = graphX + i * graphW / (outdoorGraph.dataCount - 1);
+        int y1 = pressGraphY + graphH - (int)((outdoorGraph.pressValues[i - 1] - pressMin) / (pressMax - pressMin) * graphH);
+        int y2 = pressGraphY + graphH - (int)((outdoorGraph.pressValues[i] - pressMin) / (pressMax - pressMin) * graphH);
+        lcd.drawLine(x1, y1, x2, y2);
+    }
+
+    // Info unten
+    lcd.setFont(&fonts::Font2);
+    lcd.setTextColor(COLOR_TEXT_DIM);
+    lcd.setTextDatum(bottom_center);
+    lcd.drawString(String(outdoorGraph.dataCount) + " values from CSV", screenWidth / 2, screenHeight - 2);
+}
+
 // ==================== TOUCH FUNKTIONEN ====================
 
 void checkTouch() {
@@ -652,25 +837,52 @@ void checkTouch() {
         // Debounce
         if (millis() - lastTouchTime > TOUCH_DEBOUNCE) {
             lastTouchTime = millis();
+            lastModeChange = millis();  // Reset Auto-Return Timer
 
-            // Display-Modus umschalten
-            showMinMax = !showMinMax;
+            // Display-Modus umschalten (zyklisch: 0->1->2->0)
+            displayMode = (displayMode + 1) % 3;
 
+            const char* modeNames[] = {"Normal", "Min/Max", "Graph"};
             Serial.printf("[Touch] Mode switched to: %s (at X=%d, Y=%d)\n",
-                         showMinMax ? "Min/Max" : "Normal", touchX, touchY);
+                         modeNames[displayMode], touchX, touchY);
+
+            // Graph-Daten laden wenn zu Graph gewechselt wird
+            if (displayMode == 2) {
+                loadGraphDataFromCSV();
+            }
 
             // Display sofort aktualisieren
-            lcd.fillScreen(COLOR_BG);
-            drawHeader();
-
-            if (showMinMax) {
-                drawIndoorMinMaxSection();
-                drawOutdoorMinMaxSection();
-            } else {
-                drawIndoorSection();
-                drawOutdoorSection();
-            }
+            updateDisplay();
         }
+    }
+}
+
+void updateDisplay() {
+    if (displayMode == 0) {
+        // Normal - mit Header
+        lcd.fillScreen(COLOR_BG);
+        drawHeader();
+        if (indoorReceived) drawIndoorSection();
+        if (outdoorReceived) drawOutdoorSection();
+    } else if (displayMode == 1) {
+        // Min/Max - mit Header
+        lcd.fillScreen(COLOR_BG);
+        drawHeader();
+        drawIndoorMinMaxSection();
+        drawOutdoorMinMaxSection();
+    } else if (displayMode == 2) {
+        // Graph - ohne Header (vollbild)
+        drawGraphSection();
+    }
+}
+
+void checkAutoReturn() {
+    // Nach 30 Sekunden automatisch zurück zu Schirm 1 (nur wenn nicht schon dort)
+    if (displayMode != 0 && (millis() - lastModeChange > AUTO_RETURN_TIME)) {
+        Serial.println("[Auto-Return] Returning to normal view after 30 seconds");
+        displayMode = 0;
+        lastModeChange = millis();
+        updateDisplay();
     }
 }
 
@@ -1183,6 +1395,11 @@ void setup() {
     initMinMax(indoorMinMax);
     initMinMax(outdoorMinMax);
 
+    // ========== Graph initialisieren ==========
+    outdoorGraph.dataCount = 0;
+    outdoorGraph.dataLoaded = false;
+    lastModeChange = millis();  // Timer für Auto-Return
+
     // ========== InfluxDB initialisieren (wenn WiFi aktiv) ==========
     #ifdef ENABLE_INFLUXDB
     if (wifiConnected) {
@@ -1228,31 +1445,28 @@ void loop() {
     // Touch prüfen (für Display-Modus-Wechsel)
     checkTouch();
 
+    // Auto-Return nach 30 Sekunden prüfen
+    checkAutoReturn();
+
     // I2C Daten abfragen
     if (now - lastI2CPoll >= I2C_POLL_INTERVAL) {
         lastI2CPoll = now;
         pollI2CData();
     }
 
-    // Display aktualisieren
-    if (now - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
+    // Display aktualisieren - NUR im Normal-Modus (0)
+    // Modi 1 (Min/Max) und 2 (Graph) werden nicht automatisch aktualisiert
+    if (displayMode == 0 && now - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
         lastDisplayUpdate = now;
 
         drawHeader();
 
-        if (showMinMax) {
-            // Min/Max Ansicht
-            drawIndoorMinMaxSection();
-            drawOutdoorMinMaxSection();
-        } else {
-            // Normale Ansicht
-            if (indoorReceived) {
-                drawIndoorSection();
-            }
+        if (indoorReceived) {
+            drawIndoorSection();
+        }
 
-            if (outdoorReceived) {
-                drawOutdoorSection();
-            }
+        if (outdoorReceived) {
+            drawOutdoorSection();
         }
     }
 
