@@ -854,7 +854,9 @@ bool initSDCard() {
     // Touch verwendet eigenen SPI (Pins 25,32,39)
     // SD-Karte bekommt VSPI (Pins 18,19,23)
     Serial.printf("[SD] SPI Pins: SCK=%d, MISO=%d, MOSI=%d, CS=%d\n", SD_SCK, SD_MISO, SD_MOSI, SD_CS);
-    sdSPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
+
+    // SPI.begin Parameter: SCK, MISO, MOSI (KEIN CS!)
+    sdSPI.begin(SD_SCK, SD_MISO, SD_MOSI);
 
     Serial.println("[SD] Calling SD.begin() with dedicated SPI bus...");
     if (!SD.begin(SD_CS, sdSPI)) {
