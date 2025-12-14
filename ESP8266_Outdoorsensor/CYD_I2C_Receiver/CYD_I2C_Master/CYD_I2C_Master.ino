@@ -529,7 +529,7 @@ void drawIndoorMinMaxSection() {
     int boxW = screenWidth / 2 - 10;
     int boxH = screenHeight - boxY - 5;
 
-    drawSensorBox(boxX, boxY, boxW, boxH, "INDOOR (24h)", COLOR_INDOOR);
+    drawSensorBox(boxX, boxY, boxW, boxH, "INDOOR", COLOR_INDOOR);
 
     int titleHeight = 42;
     int spriteY = boxY + titleHeight;
@@ -547,57 +547,35 @@ void drawIndoorMinMaxSection() {
         return;
     }
 
-    int contentY = 10;
-    int lineHeight = is480p ? 30 : 23;
-    int leftX = 5;
-    int rightX = spriteW - 5;
+    int contentY = 15;
+    int lineHeight = is480p ? 32 : 26;
 
     // Temperatur Min/Max
-    indoorSprite.setFont(is480p ? &fonts::FreeSansBold12pt7b : &fonts::FreeSans9pt7b);
+    indoorSprite.setFont(&fonts::Font2);
     indoorSprite.setTextColor(COLOR_TEMP);
-    indoorSprite.setTextDatum(top_left);
-    indoorSprite.drawString("Temp:", leftX, contentY);
-    indoorSprite.setTextDatum(top_right);
+    indoorSprite.setTextDatum(middle_center);
     char tempStr[32];
-    snprintf(tempStr, sizeof(tempStr), "%.1f/%.1f C", indoorMinMax.tempMin, indoorMinMax.tempMax);
-    indoorSprite.drawString(tempStr, rightX, contentY);
-    contentY += lineHeight;
-
-    // Luftfeuchtigkeit Min/Max
-    indoorSprite.setTextColor(COLOR_HUM);
-    indoorSprite.setTextDatum(top_left);
-    indoorSprite.drawString("Hum:", leftX, contentY);
-    indoorSprite.setTextDatum(top_right);
-    char humStr[32];
-    snprintf(humStr, sizeof(humStr), "%.0f/%.0f %%", indoorMinMax.humMin, indoorMinMax.humMax);
-    indoorSprite.drawString(humStr, rightX, contentY);
+    snprintf(tempStr, sizeof(tempStr), "Temp: %.1f/%.1f C", indoorMinMax.tempMin, indoorMinMax.tempMax);
+    indoorSprite.drawString(tempStr, spriteW / 2, contentY);
     contentY += lineHeight;
 
     // Luftdruck Min/Max
     indoorSprite.setTextColor(COLOR_PRESS);
-    indoorSprite.setTextDatum(top_left);
-    indoorSprite.drawString("Press:", leftX, contentY);
-    indoorSprite.setTextDatum(top_right);
     char pressStr[32];
-    snprintf(pressStr, sizeof(pressStr), "%.0f/%.0f", indoorMinMax.pressMin, indoorMinMax.pressMax);
-    indoorSprite.drawString(pressStr, rightX, contentY);
+    snprintf(pressStr, sizeof(pressStr), "Press: %.0f/%.0f", indoorMinMax.pressMin, indoorMinMax.pressMax);
+    indoorSprite.drawString(pressStr, spriteW / 2, contentY);
     contentY += lineHeight;
 
     // Batterie Min/Max
     indoorSprite.setTextColor(COLOR_BATTERY_OK);
-    indoorSprite.setTextDatum(top_left);
-    indoorSprite.drawString("Batt:", leftX, contentY);
-    indoorSprite.setTextDatum(top_right);
     char battStr[32];
-    snprintf(battStr, sizeof(battStr), "%d/%d mV", indoorMinMax.batteryMin, indoorMinMax.batteryMax);
-    indoorSprite.drawString(battStr, rightX, contentY);
-    contentY += lineHeight + 10;
+    snprintf(battStr, sizeof(battStr), "Batt: %d/%d mV", indoorMinMax.batteryMin, indoorMinMax.batteryMax);
+    indoorSprite.drawString(battStr, spriteW / 2, contentY);
+    contentY += lineHeight + 5;
 
     // Info-Text
-    indoorSprite.setFont(&fonts::Font2);
     indoorSprite.setTextColor(COLOR_TEXT_DIM);
-    indoorSprite.setTextDatum(middle_center);
-    indoorSprite.drawString("Min/Max (24h)", spriteW / 2, contentY);
+    indoorSprite.drawString("(24h Min/Max)", spriteW / 2, contentY);
 
     indoorSprite.pushSprite(boxX + 2, spriteY);
 }
@@ -608,7 +586,7 @@ void drawOutdoorMinMaxSection() {
     int boxW = screenWidth / 2 - 10;
     int boxH = screenHeight - boxY - 5;
 
-    drawSensorBox(boxX, boxY, boxW, boxH, "OUTDOOR (24h)", COLOR_OUTDOOR);
+    drawSensorBox(boxX, boxY, boxW, boxH, "OUTDOOR", COLOR_OUTDOOR);
 
     int titleHeight = 42;
     int spriteY = boxY + titleHeight;
@@ -626,53 +604,35 @@ void drawOutdoorMinMaxSection() {
         return;
     }
 
-    int contentY = 10;
-    int lineHeight = is480p ? 30 : 23;
-    int leftX = 5;
-    int rightX = spriteW - 5;
+    int contentY = 15;
+    int lineHeight = is480p ? 32 : 26;
 
     // Temperatur Min/Max
-    outdoorSprite.setFont(is480p ? &fonts::FreeSansBold12pt7b : &fonts::FreeSans9pt7b);
+    outdoorSprite.setFont(&fonts::Font2);
     outdoorSprite.setTextColor(COLOR_TEMP);
-    outdoorSprite.setTextDatum(top_left);
-    outdoorSprite.drawString("Temp:", leftX, contentY);
-    outdoorSprite.setTextDatum(top_right);
-    char tempStr[32];
-    snprintf(tempStr, sizeof(tempStr), "%.1f/%.1f C", outdoorMinMax.tempMin, outdoorMinMax.tempMax);
-    outdoorSprite.drawString(tempStr, rightX, contentY);
-    contentY += lineHeight;
-
-    // Keine Luftfeuchtigkeit für Outdoor
-    outdoorSprite.setTextColor(COLOR_TEXT_DIM);
     outdoorSprite.setTextDatum(middle_center);
-    outdoorSprite.drawString("(no humidity)", spriteW / 2, contentY);
+    char tempStr[32];
+    snprintf(tempStr, sizeof(tempStr), "Temp: %.1f/%.1f C", outdoorMinMax.tempMin, outdoorMinMax.tempMax);
+    outdoorSprite.drawString(tempStr, spriteW / 2, contentY);
     contentY += lineHeight;
 
     // Luftdruck Min/Max
     outdoorSprite.setTextColor(COLOR_PRESS);
-    outdoorSprite.setTextDatum(top_left);
-    outdoorSprite.drawString("Press:", leftX, contentY);
-    outdoorSprite.setTextDatum(top_right);
     char pressStr[32];
-    snprintf(pressStr, sizeof(pressStr), "%.0f/%.0f", outdoorMinMax.pressMin, outdoorMinMax.pressMax);
-    outdoorSprite.drawString(pressStr, rightX, contentY);
+    snprintf(pressStr, sizeof(pressStr), "Press: %.0f/%.0f", outdoorMinMax.pressMin, outdoorMinMax.pressMax);
+    outdoorSprite.drawString(pressStr, spriteW / 2, contentY);
     contentY += lineHeight;
 
     // Batterie Min/Max
     outdoorSprite.setTextColor(COLOR_BATTERY_OK);
-    outdoorSprite.setTextDatum(top_left);
-    outdoorSprite.drawString("Batt:", leftX, contentY);
-    outdoorSprite.setTextDatum(top_right);
     char battStr[32];
-    snprintf(battStr, sizeof(battStr), "%d/%d mV", outdoorMinMax.batteryMin, outdoorMinMax.batteryMax);
-    outdoorSprite.drawString(battStr, rightX, contentY);
-    contentY += lineHeight + 10;
+    snprintf(battStr, sizeof(battStr), "Batt: %d/%d mV", outdoorMinMax.batteryMin, outdoorMinMax.batteryMax);
+    outdoorSprite.drawString(battStr, spriteW / 2, contentY);
+    contentY += lineHeight + 5;
 
     // Info-Text
-    outdoorSprite.setFont(&fonts::Font2);
     outdoorSprite.setTextColor(COLOR_TEXT_DIM);
-    outdoorSprite.setTextDatum(middle_center);
-    outdoorSprite.drawString("Min/Max (24h)", spriteW / 2, contentY);
+    outdoorSprite.drawString("(24h Min/Max)", spriteW / 2, contentY);
 
     outdoorSprite.pushSprite(boxX + 2, spriteY);
 }
