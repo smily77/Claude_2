@@ -1183,9 +1183,6 @@ void setup() {
     initMinMax(indoorMinMax);
     initMinMax(outdoorMinMax);
 
-    // ========== SD-Karte initialisieren ==========
-    sdCardAvailable = initSDCard();
-
     // ========== InfluxDB initialisieren (wenn WiFi aktiv) ==========
     #ifdef ENABLE_INFLUXDB
     if (wifiConnected) {
@@ -1201,6 +1198,12 @@ void setup() {
     // ========== Initial Display ==========
     drawIndoorSection();
     drawOutdoorSection();
+
+    // WICHTIG: SD-Karte als LETZTES initialisieren!
+    // LovyanGFX verwaltet Touch intern über Display-SPI
+    // SD-Karte braucht separaten VSPI und muss NACH Display-Setup kommen
+    delay(100);  // Kurze Pause damit Display/Touch komplett ready sind
+    sdCardAvailable = initSDCard();
 
     Serial.println("\n[READY] System running!\n");
     if (sdCardAvailable) {
