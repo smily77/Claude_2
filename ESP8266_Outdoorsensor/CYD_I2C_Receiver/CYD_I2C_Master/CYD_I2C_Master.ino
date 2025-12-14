@@ -45,6 +45,9 @@
 #define SD_MISO  19
 #define SD_SCK   18
 
+// Eigener SPI-Bus für SD-Karte (VSPI)
+SPIClass sdSPI(VSPI);
+
 // WiFi Konfiguration (optional für NTP)
 
 #define NTP_SERVER "pool.ntp.org"
@@ -846,12 +849,15 @@ void sendOutdoorToInfluxDB() {
 bool initSDCard() {
     Serial.println("\n[SD] Initializing SD Card...");
 
-    // SPI für SD-Karte initialisieren
+    // Eigenen SPI-Bus für SD-Karte initialisieren (VSPI)
+    // Display verwendet eigenen SPI (Pins 14,13,12)
+    // Touch verwendet eigenen SPI (Pins 25,32,39)
+    // SD-Karte bekommt VSPI (Pins 18,19,23)
     Serial.printf("[SD] SPI Pins: SCK=%d, MISO=%d, MOSI=%d, CS=%d\n", SD_SCK, SD_MISO, SD_MOSI, SD_CS);
-    SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
+    sdSPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
 
-    Serial.println("[SD] Calling SD.begin()...");
-    if (!SD.begin(SD_CS)) {
+    Serial.println("[SD] Calling SD.begin() with dedicated SPI bus...");
+    if (!SD.begin(SD_CS, sdSPI)) {
         Serial.println("[SD] ERROR: No SD Card found or initialization failed");
         Serial.println("[SD] Check: 1) Card inserted? 2) Wiring correct? 3) Card formatted as FAT32?");
         return false;
