@@ -179,6 +179,7 @@ const unsigned long AUTO_RETURN_TIME = 30000;  // 30s Auto-Return zu Schirm 1
 struct GraphData {
     float tempValues[GRAPH_DATA_POINTS];
     float pressValues[GRAPH_DATA_POINTS];
+    bool midnightMarker[GRAPH_DATA_POINTS];  // True wenn Wert nahe Mitternacht
     uint16_t dataCount;  // Anzahl gültiger Datenpunkte
     bool dataLoaded;
 } outdoorGraph;
@@ -689,6 +690,7 @@ void loadGraphDataFromCSV() {
     const int MAX_LINES = 1000;
     float* tempData = (float*)malloc(MAX_LINES * sizeof(float));
     float* pressData = (float*)malloc(MAX_LINES * sizeof(float));
+    bool* midnightData = (bool*)malloc(MAX_LINES * sizeof(bool));
     int lineCount = 0;
 
     while (file.available() && lineCount < MAX_LINES) {
@@ -700,8 +702,15 @@ void loadGraphDataFromCSV() {
         int idx3 = line.indexOf(',', idx2 + 1);  // Nach Pressure
 
         if (idx1 > 0 && idx2 > 0 && idx3 > 0) {
+            // DateTime extrahieren und prüfen ob nahe Mitternacht (00:00-00:59)
+            String dateTime = line.substring(0, idx1);
+            int hourIdx = dateTime.indexOf(' ') + 1;  // Position nach dem Leerzeichen
+            String hourStr = dateTime.substring(hourIdx, hourIdx + 2);
+            int hour = hourStr.toInt();
+
             tempData[lineCount] = line.substring(idx1 + 1, idx2).toFloat();
             pressData[lineCount] = line.substring(idx2 + 1, idx3).toFloat();
+            midnightData[lineCount] = (hour == 0);  // Markiere wenn Stunde = 00
             lineCount++;
         }
     }
@@ -714,7 +723,10 @@ void loadGraphDataFromCSV() {
     for (int i = 0; i < outdoorGraph.dataCount; i++) {
         outdoorGraph.tempValues[i] = tempData[startIdx + i];
         outdoorGraph.pressValues[i] = pressData[startIdx + i];
+        outdoorGraph.midnightMarker[i] = midnightData[startIdx + i];
     }
+
+    free(midnightData);
 
     free(tempData);
     free(pressData);
@@ -771,6 +783,14 @@ void drawGraphSection() {
     lcd.drawString(String(tempMin, 1), graphX - 3, graphY + graphH - 5);
     lcd.drawString("C", graphX - 3, graphY + graphH / 2);
 
+    // Mitternachts-Markierungen zeichnen (dünne vertikale Linien)
+    for (int i = 0; i < outdoorGraph.dataCount; i++) {
+        if (outdoorGraph.midnightMarker[i]) {
+            int x = graphX + i * graphW / (outdoorGraph.dataCount - 1);
+            lcd.drawFastVLine(x, graphY + 1, graphH - 2, COLOR_TEXT_DIM);
+        }
+    }
+
     // Kurve zeichnen
     lcd.setColor(COLOR_TEMP);
     for (int i = 1; i < outdoorGraph.dataCount; i++) {
@@ -807,6 +827,14 @@ void drawGraphSection() {
     lcd.drawString(String((int)pressMax), graphX - 3, pressGraphY + 5);
     lcd.drawString(String((int)pressMin), graphX - 3, pressGraphY + graphH - 5);
     lcd.drawString("mbar", graphX - 3, pressGraphY + graphH / 2);
+
+    // Mitternachts-Markierungen zeichnen (dünne vertikale Linien)
+    for (int i = 0; i < outdoorGraph.dataCount; i++) {
+        if (outdoorGraph.midnightMarker[i]) {
+            int x = graphX + i * graphW / (outdoorGraph.dataCount - 1);
+            lcd.drawFastVLine(x, pressGraphY + 1, graphH - 2, COLOR_TEXT_DIM);
+        }
+    }
 
     // Kurve zeichnen
     lcd.setColor(COLOR_PRESS);
