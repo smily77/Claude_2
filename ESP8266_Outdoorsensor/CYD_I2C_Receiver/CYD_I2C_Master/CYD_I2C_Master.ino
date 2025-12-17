@@ -692,6 +692,7 @@ void loadGraphDataFromCSV() {
     float* pressData = (float*)malloc(MAX_LINES * sizeof(float));
     bool* midnightData = (bool*)malloc(MAX_LINES * sizeof(bool));
     int lineCount = 0;
+    int lastHour = -1;  // Track vorherige Stunde
 
     while (file.available() && lineCount < MAX_LINES) {
         String line = file.readStringUntil('\n');
@@ -702,7 +703,7 @@ void loadGraphDataFromCSV() {
         int idx3 = line.indexOf(',', idx2 + 1);  // Nach Pressure
 
         if (idx1 > 0 && idx2 > 0 && idx3 > 0) {
-            // DateTime extrahieren und prüfen ob nahe Mitternacht (00:00-00:59)
+            // DateTime extrahieren und Stunde auslesen
             String dateTime = line.substring(0, idx1);
             int hourIdx = dateTime.indexOf(' ') + 1;  // Position nach dem Leerzeichen
             String hourStr = dateTime.substring(hourIdx, hourIdx + 2);
@@ -710,7 +711,11 @@ void loadGraphDataFromCSV() {
 
             tempData[lineCount] = line.substring(idx1 + 1, idx2).toFloat();
             pressData[lineCount] = line.substring(idx2 + 1, idx3).toFloat();
-            midnightData[lineCount] = (hour == 0);  // Markiere wenn Stunde = 00
+
+            // Markiere nur beim ÜBERGANG zu Mitternacht (lastHour != 0 && hour == 0)
+            midnightData[lineCount] = (hour == 0 && lastHour != 0);
+            lastHour = hour;
+
             lineCount++;
         }
     }
