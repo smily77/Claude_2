@@ -168,21 +168,28 @@ int screenHeight = 240;
 bool is480p = false;
 
 // Display Mode
-uint8_t displayMode = 0;       // 0 = Normal, 1 = Min/Max, 2 = Graph
+uint8_t displayMode = 0;       // 0 = Normal, 1 = Outdoor Graph, 2 = Battery Graph, 3 = Min/Max
 unsigned long lastTouchTime = 0;
 unsigned long lastModeChange = 0;
 const unsigned long TOUCH_DEBOUNCE = 300;  // 300ms Debounce
 const unsigned long AUTO_RETURN_TIME = 30000;  // 30s Auto-Return zu Schirm 1
 
-// Graph Daten (240 Messwerte für Outdoor)
+// Graph Daten (240 Messwerte)
 #define GRAPH_DATA_POINTS 240
 struct GraphData {
-    float tempValues[GRAPH_DATA_POINTS];
-    float pressValues[GRAPH_DATA_POINTS];
+    // Outdoor
+    float outdoorTempValues[GRAPH_DATA_POINTS];
+    float outdoorPressValues[GRAPH_DATA_POINTS];
+    uint16_t outdoorBatteryValues[GRAPH_DATA_POINTS];
+
+    // Indoor
+    uint16_t indoorBatteryValues[GRAPH_DATA_POINTS];
+
     bool midnightMarker[GRAPH_DATA_POINTS];  // True wenn Wert nahe Mitternacht
     uint16_t dataCount;  // Anzahl gültiger Datenpunkte
-    bool dataLoaded;
-} outdoorGraph;
+    bool outdoorLoaded;
+    bool indoorLoaded;
+} graphData;
 
 // I2C Bridge
 I2CSensorBridge i2cBridge;
@@ -654,17 +661,17 @@ void drawOutdoorMinMaxSection() {
 
 // ==================== GRAPH FUNKTIONEN ====================
 
-void loadGraphDataFromCSV() {
+void loadOutdoorGraphDataFromCSV() {
     if (!sdCardAvailable) {
         Serial.println("[Graph] SD card not available");
-        outdoorGraph.dataLoaded = false;
+        graphData.outdoorLoaded = false;
         return;
     }
 
     String dateStr = getCurrentDateString();
     if (dateStr == "unknown") {
         Serial.println("[Graph] No valid time for file selection");
-        outdoorGraph.dataLoaded = false;
+        graphData.outdoorLoaded = false;
         return;
     }
 
@@ -672,14 +679,14 @@ void loadGraphDataFromCSV() {
 
     if (!SD.exists(filename)) {
         Serial.printf("[Graph] File not found: %s\n", filename.c_str());
-        outdoorGraph.dataLoaded = false;
+        graphData.outdoorLoaded = false;
         return;
     }
 
     File file = SD.open(filename, FILE_READ);
     if (!file) {
-        Serial.println("[Graph] Failed to open file");
-        outdoorGraph.dataLoaded = false;
+        Serial.println("[Graph] Failed to open outdoor file");
+        graphData.outdoorLoaded = false;
         return;
     }
 
@@ -690,9 +697,10 @@ void loadGraphDataFromCSV() {
     const int MAX_LINES = 1000;
     float* tempData = (float*)malloc(MAX_LINES * sizeof(float));
     float* pressData = (float*)malloc(MAX_LINES * sizeof(float));
+    uint16_t* batteryData = (uint16_t*)malloc(MAX_LINES * sizeof(uint16_t));
     bool* midnightData = (bool*)malloc(MAX_LINES * sizeof(bool));
     int lineCount = 0;
-    int lastHour = -1;  // Track vorherige Stunde
+    int lastHour = -1;
 
     while (file.available() && lineCount < MAX_LINES) {
         String line = file.readStringUntil('\n');
@@ -701,18 +709,19 @@ void loadGraphDataFromCSV() {
         int idx1 = line.indexOf(',');  // Nach DateTime
         int idx2 = line.indexOf(',', idx1 + 1);  // Nach Temperature
         int idx3 = line.indexOf(',', idx2 + 1);  // Nach Pressure
+        int idx4 = line.indexOf(',', idx3 + 1);  // Nach Battery
 
-        if (idx1 > 0 && idx2 > 0 && idx3 > 0) {
+        if (idx1 > 0 && idx2 > 0 && idx3 > 0 && idx4 > 0) {
             // DateTime extrahieren und Stunde auslesen
             String dateTime = line.substring(0, idx1);
-            int hourIdx = dateTime.indexOf(' ') + 1;  // Position nach dem Leerzeichen
+            int hourIdx = dateTime.indexOf(' ') + 1;
             String hourStr = dateTime.substring(hourIdx, hourIdx + 2);
             int hour = hourStr.toInt();
 
             tempData[lineCount] = line.substring(idx1 + 1, idx2).toFloat();
             pressData[lineCount] = line.substring(idx2 + 1, idx3).toFloat();
+            batteryData[lineCount] = line.substring(idx3 + 1, idx4).toInt();
 
-            // Markiere nur beim ÜBERGANG zu Mitternacht (lastHour != 0 && hour == 0)
             midnightData[lineCount] = (hour == 0 && lastHour != 0);
             lastHour = hour;
 
@@ -721,66 +730,130 @@ void loadGraphDataFromCSV() {
     }
     file.close();
 
-    // Die letzten 240 Werte nehmen (oder weniger wenn nicht so viele vorhanden)
+    // Die letzten 240 Werte nehmen
     int startIdx = (lineCount > GRAPH_DATA_POINTS) ? (lineCount - GRAPH_DATA_POINTS) : 0;
-    outdoorGraph.dataCount = lineCount - startIdx;
+    graphData.dataCount = lineCount - startIdx;
 
-    for (int i = 0; i < outdoorGraph.dataCount; i++) {
-        outdoorGraph.tempValues[i] = tempData[startIdx + i];
-        outdoorGraph.pressValues[i] = pressData[startIdx + i];
-        outdoorGraph.midnightMarker[i] = midnightData[startIdx + i];
+    for (int i = 0; i < graphData.dataCount; i++) {
+        graphData.outdoorTempValues[i] = tempData[startIdx + i];
+        graphData.outdoorPressValues[i] = pressData[startIdx + i];
+        graphData.outdoorBatteryValues[i] = batteryData[startIdx + i];
+        graphData.midnightMarker[i] = midnightData[startIdx + i];
     }
 
     free(midnightData);
-
+    free(batteryData);
     free(tempData);
     free(pressData);
 
-    outdoorGraph.dataLoaded = true;
-    Serial.printf("[Graph] Loaded %d data points from %s\n", outdoorGraph.dataCount, filename.c_str());
+    graphData.outdoorLoaded = true;
+    Serial.printf("[Graph] Loaded %d outdoor data points from %s\n", graphData.dataCount, filename.c_str());
 }
 
-void drawGraphSection() {
+void loadIndoorGraphDataFromCSV() {
+    if (!sdCardAvailable) {
+        Serial.println("[Graph] SD card not available");
+        graphData.indoorLoaded = false;
+        return;
+    }
+
+    String dateStr = getCurrentDateString();
+    if (dateStr == "unknown") {
+        Serial.println("[Graph] No valid time for file selection");
+        graphData.indoorLoaded = false;
+        return;
+    }
+
+    String filename = "/" + dateStr + "_indoor.csv";
+
+    if (!SD.exists(filename)) {
+        Serial.printf("[Graph] File not found: %s\n", filename.c_str());
+        graphData.indoorLoaded = false;
+        return;
+    }
+
+    File file = SD.open(filename, FILE_READ);
+    if (!file) {
+        Serial.println("[Graph] Failed to open indoor file");
+        graphData.indoorLoaded = false;
+        return;
+    }
+
+    // Header überspringen
+    file.readStringUntil('\n');
+
+    // Alle Zeilen sammeln
+    const int MAX_LINES = 1000;
+    uint16_t* batteryData = (uint16_t*)malloc(MAX_LINES * sizeof(uint16_t));
+    int lineCount = 0;
+
+    while (file.available() && lineCount < MAX_LINES) {
+        String line = file.readStringUntil('\n');
+
+        // Parse CSV: DateTime,Temperature_C,Humidity_%,Pressure_mbar,Battery_mV,...
+        int idx1 = line.indexOf(',');  // Nach DateTime
+        int idx2 = line.indexOf(',', idx1 + 1);  // Nach Temperature
+        int idx3 = line.indexOf(',', idx2 + 1);  // Nach Humidity
+        int idx4 = line.indexOf(',', idx3 + 1);  // Nach Pressure
+        int idx5 = line.indexOf(',', idx4 + 1);  // Nach Battery
+
+        if (idx1 > 0 && idx5 > 0) {
+            batteryData[lineCount] = line.substring(idx4 + 1, idx5).toInt();
+            lineCount++;
+        }
+    }
+    file.close();
+
+    // Die letzten 240 Werte nehmen
+    int startIdx = (lineCount > GRAPH_DATA_POINTS) ? (lineCount - GRAPH_DATA_POINTS) : 0;
+    int count = lineCount - startIdx;
+
+    // Indoor kann weniger Datenpunkte haben als Outdoor
+    for (int i = 0; i < count && i < graphData.dataCount; i++) {
+        graphData.indoorBatteryValues[i] = batteryData[startIdx + i];
+    }
+
+    free(batteryData);
+
+    graphData.indoorLoaded = true;
+    Serial.printf("[Graph] Loaded %d indoor battery values from %s\n", count, filename.c_str());
+}
+
+void drawOutdoorGraphSection() {
     lcd.fillScreen(COLOR_BG);
 
-    // Header mit Titel
     lcd.setFont(&fonts::FreeSansBold12pt7b);
     lcd.setTextColor(COLOR_OUTDOOR);
     lcd.setTextDatum(top_center);
     lcd.drawString("OUTDOOR - Last 240 Values", screenWidth / 2, 5);
 
-    if (!outdoorGraph.dataLoaded || outdoorGraph.dataCount < 2) {
+    if (!graphData.outdoorLoaded || graphData.dataCount < 2) {
         lcd.setFont(&fonts::FreeSans9pt7b);
         lcd.setTextColor(COLOR_TEXT_DIM);
         lcd.drawString("No data available", screenWidth / 2, screenHeight / 2);
         return;
     }
 
-    // Graph-Bereich definieren
     int graphX = 40;
     int graphY = 35;
     int graphW = screenWidth - 50;
-    int graphH = (screenHeight - 45) / 2;  // Zwei Graphen übereinander
+    int graphH = (screenHeight - 45) / 2;
 
     // ==== TEMPERATUR GRAPH ====
-    // Min/Max finden
-    float tempMin = outdoorGraph.tempValues[0];
-    float tempMax = outdoorGraph.tempValues[0];
-    for (int i = 1; i < outdoorGraph.dataCount; i++) {
-        if (outdoorGraph.tempValues[i] < tempMin) tempMin = outdoorGraph.tempValues[i];
-        if (outdoorGraph.tempValues[i] > tempMax) tempMax = outdoorGraph.tempValues[i];
+    float tempMin = graphData.outdoorTempValues[0];
+    float tempMax = graphData.outdoorTempValues[0];
+    for (int i = 1; i < graphData.dataCount; i++) {
+        if (graphData.outdoorTempValues[i] < tempMin) tempMin = graphData.outdoorTempValues[i];
+        if (graphData.outdoorTempValues[i] > tempMax) tempMax = graphData.outdoorTempValues[i];
     }
 
-    // Etwas Margin für bessere Darstellung
     float tempRange = tempMax - tempMin;
-    if (tempRange < 1.0) tempRange = 1.0;  // Minimum Range
+    if (tempRange < 1.0) tempRange = 1.0;
     tempMin -= tempRange * 0.1;
     tempMax += tempRange * 0.1;
 
-    // Rahmen
     lcd.drawRect(graphX, graphY, graphW, graphH, COLOR_TEMP);
 
-    // Y-Achsen Beschriftung (links)
     lcd.setFont(&fonts::Font2);
     lcd.setTextColor(COLOR_TEMP);
     lcd.setTextDatum(middle_right);
@@ -788,74 +861,169 @@ void drawGraphSection() {
     lcd.drawString(String(tempMin, 1), graphX - 3, graphY + graphH - 5);
     lcd.drawString("C", graphX - 3, graphY + graphH / 2);
 
-    // Mitternachts-Markierungen zeichnen (dünne vertikale Linien)
-    for (int i = 0; i < outdoorGraph.dataCount; i++) {
-        if (outdoorGraph.midnightMarker[i]) {
-            int x = graphX + i * graphW / (outdoorGraph.dataCount - 1);
+    // Mitternachts-Markierungen
+    for (int i = 0; i < graphData.dataCount; i++) {
+        if (graphData.midnightMarker[i]) {
+            int x = graphX + i * graphW / (graphData.dataCount - 1);
             lcd.drawFastVLine(x, graphY + 1, graphH - 2, COLOR_TEXT_DIM);
         }
     }
 
-    // Kurve zeichnen
+    // Kurve
     lcd.setColor(COLOR_TEMP);
-    for (int i = 1; i < outdoorGraph.dataCount; i++) {
-        int x1 = graphX + (i - 1) * graphW / (outdoorGraph.dataCount - 1);
-        int x2 = graphX + i * graphW / (outdoorGraph.dataCount - 1);
-        int y1 = graphY + graphH - (int)((outdoorGraph.tempValues[i - 1] - tempMin) / (tempMax - tempMin) * graphH);
-        int y2 = graphY + graphH - (int)((outdoorGraph.tempValues[i] - tempMin) / (tempMax - tempMin) * graphH);
+    for (int i = 1; i < graphData.dataCount; i++) {
+        int x1 = graphX + (i - 1) * graphW / (graphData.dataCount - 1);
+        int x2 = graphX + i * graphW / (graphData.dataCount - 1);
+        int y1 = graphY + graphH - (int)((graphData.outdoorTempValues[i - 1] - tempMin) / (tempMax - tempMin) * graphH);
+        int y2 = graphY + graphH - (int)((graphData.outdoorTempValues[i] - tempMin) / (tempMax - tempMin) * graphH);
         lcd.drawLine(x1, y1, x2, y2);
     }
 
     // ==== LUFTDRUCK GRAPH ====
     int pressGraphY = graphY + graphH + 10;
 
-    // Min/Max finden
-    float pressMin = outdoorGraph.pressValues[0];
-    float pressMax = outdoorGraph.pressValues[0];
-    for (int i = 1; i < outdoorGraph.dataCount; i++) {
-        if (outdoorGraph.pressValues[i] < pressMin) pressMin = outdoorGraph.pressValues[i];
-        if (outdoorGraph.pressValues[i] > pressMax) pressMax = outdoorGraph.pressValues[i];
+    float pressMin = graphData.outdoorPressValues[0];
+    float pressMax = graphData.outdoorPressValues[0];
+    for (int i = 1; i < graphData.dataCount; i++) {
+        if (graphData.outdoorPressValues[i] < pressMin) pressMin = graphData.outdoorPressValues[i];
+        if (graphData.outdoorPressValues[i] > pressMax) pressMax = graphData.outdoorPressValues[i];
     }
 
-    // Margin
     float pressRange = pressMax - pressMin;
-    if (pressRange < 5.0) pressRange = 5.0;  // Minimum Range
+    if (pressRange < 5.0) pressRange = 5.0;
     pressMin -= pressRange * 0.1;
     pressMax += pressRange * 0.1;
 
-    // Rahmen
     lcd.drawRect(graphX, pressGraphY, graphW, graphH, COLOR_PRESS);
 
-    // Y-Achsen Beschriftung
     lcd.setTextColor(COLOR_PRESS);
     lcd.setTextDatum(middle_right);
     lcd.drawString(String((int)pressMax), graphX - 3, pressGraphY + 5);
     lcd.drawString(String((int)pressMin), graphX - 3, pressGraphY + graphH - 5);
     lcd.drawString("mbar", graphX - 3, pressGraphY + graphH / 2);
 
-    // Mitternachts-Markierungen zeichnen (dünne vertikale Linien)
-    for (int i = 0; i < outdoorGraph.dataCount; i++) {
-        if (outdoorGraph.midnightMarker[i]) {
-            int x = graphX + i * graphW / (outdoorGraph.dataCount - 1);
+    // Mitternachts-Markierungen
+    for (int i = 0; i < graphData.dataCount; i++) {
+        if (graphData.midnightMarker[i]) {
+            int x = graphX + i * graphW / (graphData.dataCount - 1);
             lcd.drawFastVLine(x, pressGraphY + 1, graphH - 2, COLOR_TEXT_DIM);
         }
     }
 
-    // Kurve zeichnen
+    // Kurve
     lcd.setColor(COLOR_PRESS);
-    for (int i = 1; i < outdoorGraph.dataCount; i++) {
-        int x1 = graphX + (i - 1) * graphW / (outdoorGraph.dataCount - 1);
-        int x2 = graphX + i * graphW / (outdoorGraph.dataCount - 1);
-        int y1 = pressGraphY + graphH - (int)((outdoorGraph.pressValues[i - 1] - pressMin) / (pressMax - pressMin) * graphH);
-        int y2 = pressGraphY + graphH - (int)((outdoorGraph.pressValues[i] - pressMin) / (pressMax - pressMin) * graphH);
+    for (int i = 1; i < graphData.dataCount; i++) {
+        int x1 = graphX + (i - 1) * graphW / (graphData.dataCount - 1);
+        int x2 = graphX + i * graphW / (graphData.dataCount - 1);
+        int y1 = pressGraphY + graphH - (int)((graphData.outdoorPressValues[i - 1] - pressMin) / (pressMax - pressMin) * graphH);
+        int y2 = pressGraphY + graphH - (int)((graphData.outdoorPressValues[i] - pressMin) / (pressMax - pressMin) * graphH);
         lcd.drawLine(x1, y1, x2, y2);
     }
 
-    // Info unten
     lcd.setFont(&fonts::Font2);
     lcd.setTextColor(COLOR_TEXT_DIM);
     lcd.setTextDatum(bottom_center);
-    lcd.drawString(String(outdoorGraph.dataCount) + " values from CSV", screenWidth / 2, screenHeight - 2);
+    lcd.drawString(String(graphData.dataCount) + " values from CSV", screenWidth / 2, screenHeight - 2);
+}
+
+void drawBatteryGraphSection() {
+    lcd.fillScreen(COLOR_BG);
+
+    lcd.setFont(&fonts::FreeSansBold12pt7b);
+    lcd.setTextColor(COLOR_BATTERY_OK);
+    lcd.setTextDatum(top_center);
+    lcd.drawString("BATTERY - Last 240 Values", screenWidth / 2, 5);
+
+    if ((!graphData.outdoorLoaded && !graphData.indoorLoaded) || graphData.dataCount < 2) {
+        lcd.setFont(&fonts::FreeSans9pt7b);
+        lcd.setTextColor(COLOR_TEXT_DIM);
+        lcd.drawString("No data available", screenWidth / 2, screenHeight / 2);
+        return;
+    }
+
+    int graphX = 40;
+    int graphY = 40;
+    int graphW = screenWidth - 50;
+    int graphH = screenHeight - 60;
+
+    // Min/Max finden (über beide Sensoren)
+    uint16_t battMin = 65535;
+    uint16_t battMax = 0;
+
+    if (graphData.outdoorLoaded) {
+        for (int i = 0; i < graphData.dataCount; i++) {
+            if (graphData.outdoorBatteryValues[i] < battMin) battMin = graphData.outdoorBatteryValues[i];
+            if (graphData.outdoorBatteryValues[i] > battMax) battMax = graphData.outdoorBatteryValues[i];
+        }
+    }
+
+    if (graphData.indoorLoaded) {
+        for (int i = 0; i < graphData.dataCount; i++) {
+            if (graphData.indoorBatteryValues[i] < battMin) battMin = graphData.indoorBatteryValues[i];
+            if (graphData.indoorBatteryValues[i] > battMax) battMax = graphData.indoorBatteryValues[i];
+        }
+    }
+
+    // Margin
+    uint16_t battRange = battMax - battMin;
+    if (battRange < 100) battRange = 100;
+    battMin -= battRange * 0.1;
+    battMax += battRange * 0.1;
+
+    // Rahmen
+    lcd.drawRect(graphX, graphY, graphW, graphH, COLOR_BATTERY_OK);
+
+    // Y-Achsen Beschriftung
+    lcd.setFont(&fonts::Font2);
+    lcd.setTextColor(COLOR_BATTERY_OK);
+    lcd.setTextDatum(middle_right);
+    lcd.drawString(String(battMax), graphX - 3, graphY + 5);
+    lcd.drawString(String(battMin), graphX - 3, graphY + graphH - 5);
+    lcd.drawString("mV", graphX - 3, graphY + graphH / 2);
+
+    // Mitternachts-Markierungen
+    for (int i = 0; i < graphData.dataCount; i++) {
+        if (graphData.midnightMarker[i]) {
+            int x = graphX + i * graphW / (graphData.dataCount - 1);
+            lcd.drawFastVLine(x, graphY + 1, graphH - 2, COLOR_TEXT_DIM);
+        }
+    }
+
+    // Outdoor Kurve (Orange)
+    if (graphData.outdoorLoaded) {
+        lcd.setColor(COLOR_OUTDOOR);
+        for (int i = 1; i < graphData.dataCount; i++) {
+            int x1 = graphX + (i - 1) * graphW / (graphData.dataCount - 1);
+            int x2 = graphX + i * graphW / (graphData.dataCount - 1);
+            int y1 = graphY + graphH - (int)((graphData.outdoorBatteryValues[i - 1] - battMin) / (float)(battMax - battMin) * graphH);
+            int y2 = graphY + graphH - (int)((graphData.outdoorBatteryValues[i] - battMin) / (float)(battMax - battMin) * graphH);
+            lcd.drawLine(x1, y1, x2, y2);
+        }
+    }
+
+    // Indoor Kurve (Cyan)
+    if (graphData.indoorLoaded) {
+        lcd.setColor(COLOR_INDOOR);
+        for (int i = 1; i < graphData.dataCount; i++) {
+            int x1 = graphX + (i - 1) * graphW / (graphData.dataCount - 1);
+            int x2 = graphX + i * graphW / (graphData.dataCount - 1);
+            int y1 = graphY + graphH - (int)((graphData.indoorBatteryValues[i - 1] - battMin) / (float)(battMax - battMin) * graphH);
+            int y2 = graphY + graphH - (int)((graphData.indoorBatteryValues[i] - battMin) / (float)(battMax - battMin) * graphH);
+            lcd.drawLine(x1, y1, x2, y2);
+        }
+    }
+
+    // Legende
+    lcd.setFont(&fonts::Font2);
+    lcd.setTextDatum(bottom_left);
+    lcd.setTextColor(COLOR_OUTDOOR);
+    lcd.drawString("Outdoor", graphX + 5, screenHeight - 2);
+    lcd.setTextColor(COLOR_INDOOR);
+    lcd.drawString("Indoor", graphX + 70, screenHeight - 2);
+
+    lcd.setTextColor(COLOR_TEXT_DIM);
+    lcd.setTextDatum(bottom_right);
+    lcd.drawString(String(graphData.dataCount) + " values", screenWidth - 5, screenHeight - 2);
 }
 
 // ==================== TOUCH FUNKTIONEN ====================
@@ -872,16 +1040,22 @@ void checkTouch() {
             lastTouchTime = millis();
             lastModeChange = millis();  // Reset Auto-Return Timer
 
-            // Display-Modus umschalten (zyklisch: 0->1->2->0)
-            displayMode = (displayMode + 1) % 3;
+            // Display-Modus umschalten (zyklisch: 0->1->2->3->0)
+            displayMode = (displayMode + 1) % 4;
 
-            const char* modeNames[] = {"Normal", "Min/Max", "Graph"};
+            const char* modeNames[] = {"Normal", "Outdoor Graph", "Battery Graph", "Min/Max"};
             Serial.printf("[Touch] Mode switched to: %s (at X=%d, Y=%d)\n",
                          modeNames[displayMode], touchX, touchY);
 
-            // Graph-Daten laden wenn zu Graph gewechselt wird
-            if (displayMode == 2) {
-                loadGraphDataFromCSV();
+            // Graph-Daten laden wenn zu Graphen gewechselt wird
+            if (displayMode == 1) {
+                loadOutdoorGraphDataFromCSV();
+            } else if (displayMode == 2) {
+                // Outdoor schon geladen vom vorherigen Screen, jetzt Indoor laden
+                if (!graphData.outdoorLoaded) {
+                    loadOutdoorGraphDataFromCSV();
+                }
+                loadIndoorGraphDataFromCSV();
             }
 
             // Display sofort aktualisieren
@@ -898,14 +1072,17 @@ void updateDisplay() {
         if (indoorReceived) drawIndoorSection();
         if (outdoorReceived) drawOutdoorSection();
     } else if (displayMode == 1) {
+        // Outdoor Graph - ohne Header (vollbild)
+        drawOutdoorGraphSection();
+    } else if (displayMode == 2) {
+        // Battery Graph - ohne Header (vollbild)
+        drawBatteryGraphSection();
+    } else if (displayMode == 3) {
         // Min/Max - mit Header
         lcd.fillScreen(COLOR_BG);
         drawHeader();
         drawIndoorMinMaxSection();
         drawOutdoorMinMaxSection();
-    } else if (displayMode == 2) {
-        // Graph - ohne Header (vollbild)
-        drawGraphSection();
     }
 }
 
@@ -1429,8 +1606,9 @@ void setup() {
     initMinMax(outdoorMinMax);
 
     // ========== Graph initialisieren ==========
-    outdoorGraph.dataCount = 0;
-    outdoorGraph.dataLoaded = false;
+    graphData.dataCount = 0;
+    graphData.outdoorLoaded = false;
+    graphData.indoorLoaded = false;
     lastModeChange = millis();  // Timer für Auto-Return
 
     // ========== InfluxDB initialisieren (wenn WiFi aktiv) ==========
