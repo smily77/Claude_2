@@ -675,64 +675,125 @@ void loadOutdoorGraphDataFromCSV() {
         return;
     }
 
-    String filename = "/" + dateStr + "_outdoor.csv";
-
-    if (!SD.exists(filename)) {
-        Serial.printf("[Graph] File not found: %s\n", filename.c_str());
-        graphData.outdoorLoaded = false;
-        return;
-    }
-
-    File file = SD.open(filename, FILE_READ);
-    if (!file) {
-        Serial.println("[Graph] Failed to open outdoor file");
-        graphData.outdoorLoaded = false;
-        return;
-    }
-
-    // Header überspringen
-    file.readStringUntil('\n');
-
-    // Alle Zeilen in temporärem Array sammeln
-    const int MAX_LINES = 3000;  // Genug für ganzen Monat: 31 Tage × 96 = 2976 Einträge
+    const int MAX_LINES = 3000;
     float* tempData = (float*)malloc(MAX_LINES * sizeof(float));
     float* pressData = (float*)malloc(MAX_LINES * sizeof(float));
     uint16_t* batteryData = (uint16_t*)malloc(MAX_LINES * sizeof(uint16_t));
     bool* midnightData = (bool*)malloc(MAX_LINES * sizeof(bool));
-    int lineCount = 0;
+    int totalLines = 0;
     int lastHour = -1;
 
-    while (file.available() && lineCount < MAX_LINES) {
-        String line = file.readStringUntil('\n');
+    // Aktuelle Monatsdatei lesen
+    String filename = "/" + dateStr + "_outdoor.csv";
+    int currentMonthLines = 0;
 
-        // Parse CSV: DateTime,Temperature_C,Pressure_mbar,Battery_mV,RSSI_dBm,Battery_Warning,Sleep_Time_sec
-        int idx1 = line.indexOf(',');  // Nach DateTime
-        int idx2 = line.indexOf(',', idx1 + 1);  // Nach Temperature
-        int idx3 = line.indexOf(',', idx2 + 1);  // Nach Pressure
-        int idx4 = line.indexOf(',', idx3 + 1);  // Nach Battery
+    if (SD.exists(filename)) {
+        File file = SD.open(filename, FILE_READ);
+        if (file) {
+            file.readStringUntil('\n');  // Header überspringen
 
-        if (idx1 > 0 && idx2 > 0 && idx3 > 0 && idx4 > 0) {
-            // DateTime extrahieren und Stunde auslesen
-            String dateTime = line.substring(0, idx1);
-            int hourIdx = dateTime.indexOf(' ') + 1;
-            String hourStr = dateTime.substring(hourIdx, hourIdx + 2);
-            int hour = hourStr.toInt();
+            while (file.available() && currentMonthLines < MAX_LINES) {
+                String line = file.readStringUntil('\n');
+                int idx1 = line.indexOf(',');
+                int idx2 = line.indexOf(',', idx1 + 1);
+                int idx3 = line.indexOf(',', idx2 + 1);
+                int idx4 = line.indexOf(',', idx3 + 1);
 
-            tempData[lineCount] = line.substring(idx1 + 1, idx2).toFloat();
-            pressData[lineCount] = line.substring(idx2 + 1, idx3).toFloat();
-            batteryData[lineCount] = line.substring(idx3 + 1, idx4).toInt();
+                if (idx1 > 0 && idx2 > 0 && idx3 > 0 && idx4 > 0) {
+                    String dateTime = line.substring(0, idx1);
+                    int hourIdx = dateTime.indexOf(' ') + 1;
+                    int hour = dateTime.substring(hourIdx, hourIdx + 2).toInt();
 
-            midnightData[lineCount] = (hour == 0 && lastHour != 0);
-            lastHour = hour;
-
-            lineCount++;
+                    tempData[currentMonthLines] = line.substring(idx1 + 1, idx2).toFloat();
+                    pressData[currentMonthLines] = line.substring(idx2 + 1, idx3).toFloat();
+                    batteryData[currentMonthLines] = line.substring(idx3 + 1, idx4).toInt();
+                    midnightData[currentMonthLines] = (hour == 0 && lastHour != 0);
+                    lastHour = hour;
+                    currentMonthLines++;
+                }
+            }
+            file.close();
+            Serial.printf("[Graph] Current month (%s): %d lines\n", filename.c_str(), currentMonthLines);
         }
     }
-    file.close();
 
-    // Die letzten 240 Werte nehmen
-    int startIdx = (lineCount > GRAPH_DATA_POINTS) ? (lineCount - GRAPH_DATA_POINTS) : 0;
-    graphData.dataCount = lineCount - startIdx;
+    totalLines = currentMonthLines;
+
+    // Wenn nicht genug Daten, Vormonat laden
+    if (totalLines < GRAPH_DATA_POINTS) {
+        String prevMonth = getPreviousMonthString(dateStr);
+        String prevFilename = "/" + prevMonth + "_outdoor.csv";
+
+        if (prevMonth != "unknown" && SD.exists(prevFilename)) {
+            // Temporäre Arrays für Vormonat
+            float* prevTemp = (float*)malloc(MAX_LINES * sizeof(float));
+            float* prevPress = (float*)malloc(MAX_LINES * sizeof(float));
+            uint16_t* prevBatt = (uint16_t*)malloc(MAX_LINES * sizeof(uint16_t));
+            bool* prevMidnight = (bool*)malloc(MAX_LINES * sizeof(bool));
+            int prevLines = 0;
+            int prevLastHour = -1;
+
+            File file = SD.open(prevFilename, FILE_READ);
+            if (file) {
+                file.readStringUntil('\n');  // Header überspringen
+
+                while (file.available() && prevLines < MAX_LINES) {
+                    String line = file.readStringUntil('\n');
+                    int idx1 = line.indexOf(',');
+                    int idx2 = line.indexOf(',', idx1 + 1);
+                    int idx3 = line.indexOf(',', idx2 + 1);
+                    int idx4 = line.indexOf(',', idx3 + 1);
+
+                    if (idx1 > 0 && idx2 > 0 && idx3 > 0 && idx4 > 0) {
+                        String dateTime = line.substring(0, idx1);
+                        int hourIdx = dateTime.indexOf(' ') + 1;
+                        int hour = dateTime.substring(hourIdx, hourIdx + 2).toInt();
+
+                        prevTemp[prevLines] = line.substring(idx1 + 1, idx2).toFloat();
+                        prevPress[prevLines] = line.substring(idx2 + 1, idx3).toFloat();
+                        prevBatt[prevLines] = line.substring(idx3 + 1, idx4).toInt();
+                        prevMidnight[prevLines] = (hour == 0 && prevLastHour != 0);
+                        prevLastHour = hour;
+                        prevLines++;
+                    }
+                }
+                file.close();
+
+                // Fehlende Anzahl aus Vormonat nehmen
+                int needed = GRAPH_DATA_POINTS - currentMonthLines;
+                int prevStart = (prevLines > needed) ? (prevLines - needed) : 0;
+                int prevCount = prevLines - prevStart;
+
+                // Aktuelle Daten nach hinten verschieben
+                for (int i = currentMonthLines - 1; i >= 0; i--) {
+                    tempData[i + prevCount] = tempData[i];
+                    pressData[i + prevCount] = pressData[i];
+                    batteryData[i + prevCount] = batteryData[i];
+                    midnightData[i + prevCount] = midnightData[i];
+                }
+
+                // Vormonatsdaten an den Anfang kopieren
+                for (int i = 0; i < prevCount; i++) {
+                    tempData[i] = prevTemp[prevStart + i];
+                    pressData[i] = prevPress[prevStart + i];
+                    batteryData[i] = prevBatt[prevStart + i];
+                    midnightData[i] = prevMidnight[prevStart + i];
+                }
+
+                totalLines = prevCount + currentMonthLines;
+                Serial.printf("[Graph] Added %d lines from previous month (%s)\n", prevCount, prevFilename.c_str());
+            }
+
+            free(prevMidnight);
+            free(prevBatt);
+            free(prevPress);
+            free(prevTemp);
+        }
+    }
+
+    // Die letzten 240 Werte ins graphData kopieren
+    int startIdx = (totalLines > GRAPH_DATA_POINTS) ? (totalLines - GRAPH_DATA_POINTS) : 0;
+    graphData.dataCount = totalLines - startIdx;
 
     for (int i = 0; i < graphData.dataCount; i++) {
         graphData.outdoorTempValues[i] = tempData[startIdx + i];
@@ -743,11 +804,11 @@ void loadOutdoorGraphDataFromCSV() {
 
     free(midnightData);
     free(batteryData);
-    free(tempData);
     free(pressData);
+    free(tempData);
 
     graphData.outdoorLoaded = true;
-    Serial.printf("[Graph] Loaded %d outdoor data points from %s\n", graphData.dataCount, filename.c_str());
+    Serial.printf("[Graph] Loaded %d outdoor data points (total)\n", graphData.dataCount);
 }
 
 void loadIndoorGraphDataFromCSV() {
@@ -764,51 +825,95 @@ void loadIndoorGraphDataFromCSV() {
         return;
     }
 
-    String filename = "/" + dateStr + "_indoor.csv";
-
-    if (!SD.exists(filename)) {
-        Serial.printf("[Graph] File not found: %s\n", filename.c_str());
-        graphData.indoorLoaded = false;
-        return;
-    }
-
-    File file = SD.open(filename, FILE_READ);
-    if (!file) {
-        Serial.println("[Graph] Failed to open indoor file");
-        graphData.indoorLoaded = false;
-        return;
-    }
-
-    // Header überspringen
-    file.readStringUntil('\n');
-
-    // Alle Zeilen sammeln
-    const int MAX_LINES = 3000;  // Genug für ganzen Monat: 31 Tage × 96 = 2976 Einträge
+    const int MAX_LINES = 3000;
     uint16_t* batteryData = (uint16_t*)malloc(MAX_LINES * sizeof(uint16_t));
-    int lineCount = 0;
+    int totalLines = 0;
 
-    while (file.available() && lineCount < MAX_LINES) {
-        String line = file.readStringUntil('\n');
+    // Aktuelle Monatsdatei lesen
+    String filename = "/" + dateStr + "_indoor.csv";
+    int currentMonthLines = 0;
 
-        // Parse CSV: DateTime,Temperature_C,Humidity_%,Pressure_mbar,Battery_mV,...
-        int idx1 = line.indexOf(',');  // Nach DateTime
-        int idx2 = line.indexOf(',', idx1 + 1);  // Nach Temperature
-        int idx3 = line.indexOf(',', idx2 + 1);  // Nach Humidity
-        int idx4 = line.indexOf(',', idx3 + 1);  // Nach Pressure
-        int idx5 = line.indexOf(',', idx4 + 1);  // Nach Battery
+    if (SD.exists(filename)) {
+        File file = SD.open(filename, FILE_READ);
+        if (file) {
+            file.readStringUntil('\n');  // Header überspringen
 
-        if (idx1 > 0 && idx5 > 0) {
-            batteryData[lineCount] = line.substring(idx4 + 1, idx5).toInt();
-            lineCount++;
+            while (file.available() && currentMonthLines < MAX_LINES) {
+                String line = file.readStringUntil('\n');
+                int idx1 = line.indexOf(',');
+                int idx2 = line.indexOf(',', idx1 + 1);
+                int idx3 = line.indexOf(',', idx2 + 1);
+                int idx4 = line.indexOf(',', idx3 + 1);
+                int idx5 = line.indexOf(',', idx4 + 1);
+
+                if (idx1 > 0 && idx5 > 0) {
+                    batteryData[currentMonthLines] = line.substring(idx4 + 1, idx5).toInt();
+                    currentMonthLines++;
+                }
+            }
+            file.close();
+            Serial.printf("[Graph] Current month (%s): %d lines\n", filename.c_str(), currentMonthLines);
         }
     }
-    file.close();
 
-    // Die letzten 240 Werte nehmen
-    int startIdx = (lineCount > GRAPH_DATA_POINTS) ? (lineCount - GRAPH_DATA_POINTS) : 0;
-    int count = lineCount - startIdx;
+    totalLines = currentMonthLines;
 
-    // Indoor kann weniger Datenpunkte haben als Outdoor
+    // Wenn nicht genug Daten, Vormonat laden
+    if (totalLines < GRAPH_DATA_POINTS) {
+        String prevMonth = getPreviousMonthString(dateStr);
+        String prevFilename = "/" + prevMonth + "_indoor.csv";
+
+        if (prevMonth != "unknown" && SD.exists(prevFilename)) {
+            uint16_t* prevBatt = (uint16_t*)malloc(MAX_LINES * sizeof(uint16_t));
+            int prevLines = 0;
+
+            File file = SD.open(prevFilename, FILE_READ);
+            if (file) {
+                file.readStringUntil('\n');  // Header überspringen
+
+                while (file.available() && prevLines < MAX_LINES) {
+                    String line = file.readStringUntil('\n');
+                    int idx1 = line.indexOf(',');
+                    int idx2 = line.indexOf(',', idx1 + 1);
+                    int idx3 = line.indexOf(',', idx2 + 1);
+                    int idx4 = line.indexOf(',', idx3 + 1);
+                    int idx5 = line.indexOf(',', idx4 + 1);
+
+                    if (idx1 > 0 && idx5 > 0) {
+                        prevBatt[prevLines] = line.substring(idx4 + 1, idx5).toInt();
+                        prevLines++;
+                    }
+                }
+                file.close();
+
+                // Fehlende Anzahl aus Vormonat nehmen
+                int needed = GRAPH_DATA_POINTS - currentMonthLines;
+                int prevStart = (prevLines > needed) ? (prevLines - needed) : 0;
+                int prevCount = prevLines - prevStart;
+
+                // Aktuelle Daten nach hinten verschieben
+                for (int i = currentMonthLines - 1; i >= 0; i--) {
+                    batteryData[i + prevCount] = batteryData[i];
+                }
+
+                // Vormonatsdaten an den Anfang kopieren
+                for (int i = 0; i < prevCount; i++) {
+                    batteryData[i] = prevBatt[prevStart + i];
+                }
+
+                totalLines = prevCount + currentMonthLines;
+                Serial.printf("[Graph] Added %d lines from previous month (%s)\n", prevCount, prevFilename.c_str());
+            }
+
+            free(prevBatt);
+        }
+    }
+
+    // Die letzten 240 Werte ins graphData kopieren
+    int startIdx = (totalLines > GRAPH_DATA_POINTS) ? (totalLines - GRAPH_DATA_POINTS) : 0;
+    int count = totalLines - startIdx;
+
+    // Synchronisiere mit Outdoor dataCount (beide Sensoren sollten gleiche Anzahl haben)
     for (int i = 0; i < count && i < graphData.dataCount; i++) {
         graphData.indoorBatteryValues[i] = batteryData[startIdx + i];
     }
@@ -816,7 +921,7 @@ void loadIndoorGraphDataFromCSV() {
     free(batteryData);
 
     graphData.indoorLoaded = true;
-    Serial.printf("[Graph] Loaded %d indoor battery values from %s\n", count, filename.c_str());
+    Serial.printf("[Graph] Loaded %d indoor battery values (total)\n", count);
 }
 
 void drawOutdoorGraphSection() {
@@ -1321,6 +1426,26 @@ String getCurrentDateString() {
     char dateStr[16];
     strftime(dateStr, sizeof(dateStr), "%Y%m", &timeinfo);  // Nur Jahr+Monat (monatliche Dateien)
     return String(dateStr);
+}
+
+String getPreviousMonthString(String currentMonth) {
+    // Format: YYYYMM (z.B. "202501" → "202412")
+    if (currentMonth == "unknown" || currentMonth.length() != 6) return "unknown";
+
+    int year = currentMonth.substring(0, 4).toInt();
+    int month = currentMonth.substring(4, 6).toInt();
+
+    // Vormonat berechnen
+    if (month == 1) {
+        year--;
+        month = 12;
+    } else {
+        month--;
+    }
+
+    char prevMonth[16];
+    snprintf(prevMonth, sizeof(prevMonth), "%04d%02d", year, month);
+    return String(prevMonth);
 }
 
 String getDateTimeString() {
