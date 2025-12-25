@@ -694,7 +694,7 @@ void loadOutdoorGraphDataFromCSV() {
     file.readStringUntil('\n');
 
     // Alle Zeilen in temporärem Array sammeln
-    const int MAX_LINES = 1000;
+    const int MAX_LINES = 3000;  // Genug für ganzen Monat: 31 Tage × 96 = 2976 Einträge
     float* tempData = (float*)malloc(MAX_LINES * sizeof(float));
     float* pressData = (float*)malloc(MAX_LINES * sizeof(float));
     uint16_t* batteryData = (uint16_t*)malloc(MAX_LINES * sizeof(uint16_t));
@@ -783,7 +783,7 @@ void loadIndoorGraphDataFromCSV() {
     file.readStringUntil('\n');
 
     // Alle Zeilen sammeln
-    const int MAX_LINES = 1000;
+    const int MAX_LINES = 3000;  // Genug für ganzen Monat: 31 Tage × 96 = 2976 Einträge
     uint16_t* batteryData = (uint16_t*)malloc(MAX_LINES * sizeof(uint16_t));
     int lineCount = 0;
 
@@ -1047,14 +1047,12 @@ void checkTouch() {
             Serial.printf("[Touch] Mode switched to: %s (at X=%d, Y=%d)\n",
                          modeNames[displayMode], touchX, touchY);
 
-            // Graph-Daten laden wenn zu Graphen gewechselt wird
+            // Graph-Daten bei jedem Wechsel neu laden (zeigt aktuelle Daten)
             if (displayMode == 1) {
                 loadOutdoorGraphDataFromCSV();
             } else if (displayMode == 2) {
-                // Outdoor schon geladen vom vorherigen Screen, jetzt Indoor laden
-                if (!graphData.outdoorLoaded) {
-                    loadOutdoorGraphDataFromCSV();
-                }
+                // Beide Sensoren neu laden für aktuellste Daten
+                loadOutdoorGraphDataFromCSV();
                 loadIndoorGraphDataFromCSV();
             }
 
