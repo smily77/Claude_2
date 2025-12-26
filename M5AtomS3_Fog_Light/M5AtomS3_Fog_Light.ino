@@ -16,14 +16,30 @@
  * - Startposition: Symbol Blau (240°) 100%, Hintergrund Schwarz (0°) 0%
  *
  * Voraussetzungen:
- * - M5Unified Bibliothek installiert
+ * - TFT_eSPI Bibliothek installiert und konfiguriert für AtomS3
  * - M5Unit-8Encoder Bibliothek installiert
  * - Board: M5Stack-ATOMS3
+ *
+ * TFT_eSPI Konfiguration (User_Setup.h oder User_Setup_Select.h):
+ * - Driver: GC9107
+ * - Pins siehe Setup-Kommentare unten
  */
 
-#include <M5Unified.h>
+#include <TFT_eSPI.h>
+#include <Wire.h>
 #include "UNIT_8ENCODER.h"
 #include "fog_light_bitmap.h"
+
+// TFT Display
+TFT_eSPI tft = TFT_eSPI();
+
+// AtomS3 Display Pins (falls nicht in User_Setup.h definiert)
+// TFT_MOSI = 21
+// TFT_SCLK = 17
+// TFT_CS   = 15
+// TFT_DC   = 33
+// TFT_RST  = 34
+// TFT_BL   = 16 (Backlight)
 
 // Unit 8 Encoder
 UNIT_8ENCODER encoder;
@@ -68,18 +84,18 @@ bool encoderConnected = false;
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("\n=== M5Stack AtomS3 - Fog Light ===");
+  Serial.println("\n=== M5Stack AtomS3 - Fog Light (TFT_eSPI) ===");
 
-  // M5Unified initialisieren (initialisiert auch I2C)
-  auto cfg = M5.config();
-  M5.begin(cfg);
+  // TFT Display initialisieren
+  tft.init();
+  tft.setRotation(0);
+  tft.fillScreen(TFT_BLACK);
 
-  // Display initialisieren
-  M5.Display.setRotation(0);
-  M5.Display.fillScreen(TFT_BLACK);
+  Serial.println("TFT Display initialized");
+  Serial.printf("Display Size: %dx%d\n", tft.width(), tft.height());
 
   // I2C Scanner durchführen
-  Serial.println("Scanning I2C Bus...");
+  Serial.println("\nScanning I2C Bus...");
   Wire.begin(SDA_PIN, SCL_PIN, 100000UL);  // Explizit mit Pins und Frequenz
   delay(100);
 
@@ -124,9 +140,6 @@ void setup() {
 }
 
 void loop() {
-  // M5Stack aktualisieren
-  M5.update();
-
   if (!encoderConnected) {
     // Periodisch versuchen, Encoder neu zu verbinden
     static unsigned long lastRetry = 0;
@@ -243,11 +256,11 @@ void displayFogLight(int symbolHue, int symbolBrightness,
   uint16_t bgColor = hsvToRgb565(bgHue, 100, bgBrightness);
 
   // Hintergrund mit gewählter Farbe füllen
-  M5.Display.fillScreen(bgColor);
+  tft.fillScreen(bgColor);
 
   // Bitmap zentriert auf dem 128x128 Display zeichnen
-  int offsetX = (128 - BITMAP_WIDTH) / 2;
-  int offsetY = (128 - BITMAP_HEIGHT) / 2;
+  int offsetX = (tft.width() - BITMAP_WIDTH) / 2;
+  int offsetY = (tft.height() - BITMAP_HEIGHT) / 2;
 
   // Jedes Pixel des Bitmaps durchgehen
   for (int y = 0; y < BITMAP_HEIGHT; y++) {
@@ -261,7 +274,7 @@ void displayFogLight(int symbolHue, int symbolBrightness,
 
       if (!isBackground) {
         // Symbol-Pixel zeichnen
-        M5.Display.drawPixel(offsetX + x, offsetY + y, symbolColor);
+        tft.drawPixel(offsetX + x, offsetY + y, symbolColor);
       }
       // Hintergrund-Pixel wurden bereits durch fillScreen gesetzt
     }
