@@ -9,9 +9,9 @@
  * - M5Stack Unit 8 Encoder an Port.A (Grove)
  *
  * Steuerung:
- * - CH1 (Encoder 1): Farbwechsel durch Drehen
- * - CH2 (Encoder 2): Helligkeitsänderung durch Drehen
- * - Startposition: Blau, volle Helligkeit
+ * - CH1 (Encoder 1): Farbton (Hue) durch Drehen (0-360°)
+ * - CH2 (Encoder 2): Helligkeit durch Drehen (0-100%)
+ * - Startposition: Blau (240°), volle Helligkeit (100%)
  *
  * Voraussetzungen:
  * - M5Unified Bibliothek installiert
@@ -27,31 +27,18 @@
 UNIT_8ENCODER encoder;
 #define ENCODER_ADDR 0x41
 
-// Port.A GPIO Pins für AtomS3
-#define SDA_PIN 1
-#define SCL_PIN 2
-
-// Farbpalette für das Symbol
-uint16_t baseColors[] = {
-  TFT_RED,
-  TFT_ORANGE,
-  TFT_YELLOW,
-  TFT_GREEN,
-  TFT_CYAN,
-  TFT_BLUE,      // Index 5 - Startfarbe
-  TFT_MAGENTA,
-  TFT_WHITE
-};
-
-const int numColors = sizeof(baseColors) / sizeof(baseColors[0]);
+// Port.A GPIO Pins für AtomS3 (Standard Grove Port)
+// AtomS3 Port.A: GPIO2 (SDA), GPIO1 (SCL)
+#define SDA_PIN 2
+#define SCL_PIN 1
 
 // Bitmap-Eigenschaften
 const int BITMAP_WIDTH = 96;
 const int BITMAP_HEIGHT = 96;
 const int BYTES_PER_ROW = 12;  // (96 + 7) / 8 = 12
 
-// Aktuelle Einstellungen
-int currentColorIndex = 5;     // Start: Blau (Index 5)
+// HSV Farbsteuerung
+int currentHue = 240;          // Start: Blau (240°)
 int currentBrightness = 100;   // Start: 100% Helligkeit
 
 // Encoder-Tracking
@@ -61,8 +48,15 @@ int32_t lastEncoderValue_CH2 = 0;
 // Update-Flag
 bool needsRedraw = true;
 
+// I2C Status
+bool encoderConnected = false;
+
 void setup() {
-  // M5Unified initialisieren
+  Serial.begin(115200);
+  delay(100);
+  Serial.println("\n=== M5Stack AtomS3 - Fog Light ===");
+
+  // M5Unified initialisieren (initialisiert auch I2C)
   auto cfg = M5.config();
   M5.begin(cfg);
 
@@ -70,55 +64,86 @@ void setup() {
   M5.Display.setRotation(0);
   M5.Display.fillScreen(TFT_BLACK);
 
-  // I2C für Unit 8 Encoder initialisieren
-  Wire.begin(SDA_PIN, SCL_PIN);
+  // I2C Scanner durchführen
+  Serial.println("Scanning I2C Bus...");
+  Wire.begin(SDA_PIN, SCL_PIN, 100000UL);  // Explizit mit Pins und Frequenz
+  delay(100);
+
+  scanI2C();
 
   // Unit 8 Encoder initialisieren
-  encoder.begin(&Wire, ENCODER_ADDR, SDA_PIN, SCL_PIN, 100000UL);
+  Serial.println("\nInitializing Unit 8 Encoder...");
 
-  // Encoder-Werte initialisieren
-  lastEncoderValue_CH1 = encoder.getEncoderValue(0);  // CH1
-  lastEncoderValue_CH2 = encoder.getEncoderValue(1);  // CH2
+  // Versuche Encoder zu initialisieren ohne nochmal Wire.begin
+  // Die Bibliothek könnte intern Wire.begin aufrufen, das ist okay
+  if (encoder.begin(&Wire, ENCODER_ADDR, SDA_PIN, SCL_PIN, 100000UL)) {
+    Serial.println("✓ Encoder initialized successfully");
+    encoderConnected = true;
+
+    // Encoder-Werte initialisieren
+    delay(50);
+    lastEncoderValue_CH1 = encoder.getEncoderValue(0);  // CH1
+    lastEncoderValue_CH2 = encoder.getEncoderValue(1);  // CH2
+
+    Serial.printf("Initial CH1: %d, CH2: %d\n", lastEncoderValue_CH1, lastEncoderValue_CH2);
+  } else {
+    Serial.println("✗ Encoder initialization failed!");
+    encoderConnected = false;
+  }
 
   // Erstes Symbol zeichnen
   drawFogLightBitmap();
 
-  Serial.begin(115200);
-  Serial.println("M5Stack AtomS3 - Fog Light mit 8 Encoder");
-  Serial.println("CH1: Farbe, CH2: Helligkeit");
+  Serial.println("\n=== Setup Complete ===");
+  Serial.println("CH1: Hue (0-360°)");
+  Serial.println("CH2: Brightness (0-100%)");
+  Serial.printf("Start: Hue=%d°, Brightness=%d%%\n", currentHue, currentBrightness);
 }
 
 void loop() {
   // M5Stack aktualisieren
   M5.update();
 
-  // CH1: Farbwechsel (Encoder 0)
+  if (!encoderConnected) {
+    // Periodisch versuchen, Encoder neu zu verbinden
+    static unsigned long lastRetry = 0;
+    if (millis() - lastRetry > 5000) {
+      lastRetry = millis();
+      Serial.println("Retrying encoder connection...");
+      if (encoder.begin(&Wire, ENCODER_ADDR, SDA_PIN, SCL_PIN, 100000UL)) {
+        encoderConnected = true;
+        Serial.println("✓ Encoder reconnected!");
+      }
+    }
+    delay(100);
+    return;
+  }
+
+  // CH1: Farbton (Hue) - Encoder 0
   int32_t encoderValue_CH1 = encoder.getEncoderValue(0);
   if (encoderValue_CH1 != lastEncoderValue_CH1) {
     int32_t delta = encoderValue_CH1 - lastEncoderValue_CH1;
 
-    // Farbe ändern basierend auf Encoder-Richtung
-    if (delta > 0) {
-      // Rechts gedreht: nächste Farbe
-      currentColorIndex = (currentColorIndex + 1) % numColors;
-    } else if (delta < 0) {
-      // Links gedreht: vorherige Farbe
-      currentColorIndex = (currentColorIndex - 1 + numColors) % numColors;
-    }
+    // Hue ändern (2° pro Encoder-Schritt für feine Anpassung)
+    currentHue += (delta * 2);
+
+    // Hue im Bereich 0-360° halten (Wraparound)
+    while (currentHue < 0) currentHue += 360;
+    while (currentHue >= 360) currentHue -= 360;
 
     lastEncoderValue_CH1 = encoderValue_CH1;
     needsRedraw = true;
 
-    Serial.printf("CH1: Farbe = %d\n", currentColorIndex);
+    Serial.printf("CH1: Hue = %d° (encoder: %d)\n", currentHue, encoderValue_CH1);
   }
 
-  // CH2: Helligkeit (Encoder 1)
+  // CH2: Helligkeit (Brightness) - Encoder 1
   int32_t encoderValue_CH2 = encoder.getEncoderValue(1);
   if (encoderValue_CH2 != lastEncoderValue_CH2) {
     int32_t delta = encoderValue_CH2 - lastEncoderValue_CH2;
 
-    // Helligkeit ändern basierend auf Encoder-Richtung
-    currentBrightness += (delta > 0) ? 5 : -5;
+    // Helligkeit ändern (5% pro Encoder-Schritt)
+    currentBrightness += (delta * 5);
 
     // Helligkeit begrenzen (0-100%)
     if (currentBrightness > 100) currentBrightness = 100;
@@ -127,7 +152,7 @@ void loop() {
     lastEncoderValue_CH2 = encoderValue_CH2;
     needsRedraw = true;
 
-    Serial.printf("CH2: Helligkeit = %d%%\n", currentBrightness);
+    Serial.printf("CH2: Brightness = %d%% (encoder: %d)\n", currentBrightness, encoderValue_CH2);
   }
 
   // Neuzeichnen wenn nötig
@@ -141,8 +166,8 @@ void loop() {
 }
 
 void drawFogLightBitmap() {
-  // Aktuelle Farbe mit Helligkeit berechnen
-  uint16_t displayColor = adjustBrightness(baseColors[currentColorIndex], currentBrightness);
+  // HSV zu RGB konvertieren mit aktueller Helligkeit
+  uint16_t displayColor = hsvToRgb565(currentHue, 100, currentBrightness);
 
   // Bitmap zentriert auf dem 128x128 Display zeichnen
   int offsetX = (128 - BITMAP_WIDTH) / 2;
@@ -165,17 +190,68 @@ void drawFogLightBitmap() {
   }
 }
 
-uint16_t adjustBrightness(uint16_t color, int brightness) {
-  // RGB565 Farbe in Komponenten zerlegen
-  uint8_t r = (color >> 11) & 0x1F;
-  uint8_t g = (color >> 5) & 0x3F;
-  uint8_t b = color & 0x1F;
+// HSV zu RGB565 Konvertierung
+// h: Hue (0-360°), s: Saturation (0-100%), v: Value/Brightness (0-100%)
+uint16_t hsvToRgb565(int h, int s, int v) {
+  float H = h;
+  float S = s / 100.0;
+  float V = v / 100.0;
 
-  // Helligkeit anwenden (0-100%)
-  r = (r * brightness) / 100;
-  g = (g * brightness) / 100;
-  b = (b * brightness) / 100;
+  float C = V * S;
+  float X = C * (1 - abs(fmod(H / 60.0, 2) - 1));
+  float m = V - C;
 
-  // Zurück in RGB565 konvertieren
-  return (r << 11) | (g << 5) | b;
+  float r, g, b;
+
+  if (H >= 0 && H < 60) {
+    r = C; g = X; b = 0;
+  } else if (H >= 60 && H < 120) {
+    r = X; g = C; b = 0;
+  } else if (H >= 120 && H < 180) {
+    r = 0; g = C; b = X;
+  } else if (H >= 180 && H < 240) {
+    r = 0; g = X; b = C;
+  } else if (H >= 240 && H < 300) {
+    r = X; g = 0; b = C;
+  } else {
+    r = C; g = 0; b = X;
+  }
+
+  // Zu 0-255 konvertieren
+  uint8_t R = (r + m) * 255;
+  uint8_t G = (g + m) * 255;
+  uint8_t B = (b + m) * 255;
+
+  // Zu RGB565 konvertieren
+  uint16_t r5 = (R >> 3) & 0x1F;
+  uint16_t g6 = (G >> 2) & 0x3F;
+  uint16_t b5 = (B >> 3) & 0x1F;
+
+  return (r5 << 11) | (g6 << 5) | b5;
+}
+
+void scanI2C() {
+  byte error, address;
+  int deviceCount = 0;
+
+  Serial.println("Scanning I2C addresses 0x01-0x7F...");
+
+  for (address = 1; address < 127; address++) {
+    Wire.beginTransmission(address);
+    error = Wire.endTransmission();
+
+    if (error == 0) {
+      Serial.printf("✓ I2C device found at 0x%02X\n", address);
+      deviceCount++;
+    }
+  }
+
+  if (deviceCount == 0) {
+    Serial.println("✗ No I2C devices found!");
+    Serial.println("Check connections:");
+    Serial.printf("  SDA: GPIO%d\n", SDA_PIN);
+    Serial.printf("  SCL: GPIO%d\n", SCL_PIN);
+  } else {
+    Serial.printf("✓ Found %d device(s) on I2C bus\n", deviceCount);
+  }
 }
