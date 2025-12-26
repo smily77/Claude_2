@@ -56,6 +56,9 @@ int32_t lastEncoderValue_CH4 = 0;
 // Update-Flag
 bool needsRedraw = true;
 
+// Display-Modus (false = Symbol, true = Parameter)
+bool showParams = false;
+
 // I2C Status
 bool encoderConnected = false;
 
@@ -104,7 +107,7 @@ void setup() {
   }
 
   // Erstes Symbol zeichnen
-  displayFogLight(symbolHue, symbolBrightness, bgHue, bgBrightness);
+  displayFogLight(symbolHue, symbolBrightness, bgHue, bgBrightness, fog_light_icon_96x96);
 
   Serial.println("\n=== Setup Complete ===");
   Serial.println("CH1: Symbol Hue (0-360°, 0.5° steps)");
@@ -118,6 +121,13 @@ void setup() {
 void loop() {
   // M5Stack aktualisieren
   M5.update();
+
+  // Tastendruck: Toggle zwischen Symbol und Parameter-Anzeige
+  if (M5.BtnA.wasPressed()) {
+    showParams = !showParams;
+    needsRedraw = true;
+    Serial.printf("Display mode: %s\n", showParams ? "Parameters" : "Symbol");
+  }
 
   if (!encoderConnected) {
     // Periodisch versuchen, Encoder neu zu verbinden
@@ -210,7 +220,11 @@ void loop() {
 
   // Neuzeichnen wenn nötig
   if (needsRedraw) {
-    displayFogLight(symbolHue, symbolBrightness, bgHue, bgBrightness);
+    if (showParams) {
+      displayParameters(symbolHue, symbolBrightness, bgHue, bgBrightness);
+    } else {
+      displayFogLight(symbolHue, symbolBrightness, bgHue, bgBrightness, fog_light_icon_96x96);
+    }
     needsRedraw = false;
   }
 
@@ -224,8 +238,9 @@ void loop() {
  * @param sBright Symbol Helligkeit (0-100%)
  * @param bHue    Hintergrund Farbton (0-360°)
  * @param bBright Hintergrund Helligkeit (0-100%)
+ * @param bitmap  Zeiger auf das 1-Bit Bitmap-Array
  */
-void displayFogLight(int sHue, int sBright, int bHue, int bBright) {
+void displayFogLight(int sHue, int sBright, int bHue, int bBright, const unsigned char* bitmap) {
   // Farben berechnen
   uint16_t symbolColor = hsvToRgb565(sHue, 100, sBright);
   uint16_t bgColor = hsvToRgb565(bHue, 100, bBright);
@@ -245,7 +260,7 @@ void displayFogLight(int sHue, int sBright, int bHue, int bBright) {
       int bitPosition = 7 - (x % 8);
 
       // Bit auslesen (0 = Symbol zeichnen, 1 = Hintergrund)
-      bool isBackground = (fog_light_icon_96x96[byteIndex] >> bitPosition) & 0x01;
+      bool isBackground = (bitmap[byteIndex] >> bitPosition) & 0x01;
 
       if (!isBackground) {
         // Symbol-Pixel zeichnen
@@ -254,6 +269,54 @@ void displayFogLight(int sHue, int sBright, int bHue, int bBright) {
       // Hintergrund wurde bereits durch fillScreen gesetzt
     }
   }
+}
+
+/**
+ * Zeigt alle 4 Parameter auf dem Display
+ *
+ * @param sHue    Symbol Farbton (0-360°)
+ * @param sBright Symbol Helligkeit (0-100%)
+ * @param bHue    Hintergrund Farbton (0-360°)
+ * @param bBright Hintergrund Helligkeit (0-100%)
+ */
+void displayParameters(int sHue, int sBright, int bHue, int bBright) {
+  M5.Display.fillScreen(TFT_BLACK);
+  M5.Display.setTextColor(TFT_WHITE);
+  M5.Display.setTextSize(1);
+
+  int y = 20;
+  int lineHeight = 20;
+
+  M5.Display.setCursor(10, y);
+  M5.Display.println("=== Parameter ===");
+  y += lineHeight + 10;
+
+  M5.Display.setCursor(10, y);
+  M5.Display.printf("Symbol Hue:");
+  y += lineHeight;
+  M5.Display.setCursor(10, y);
+  M5.Display.printf("%d Grad", sHue);
+  y += lineHeight + 5;
+
+  M5.Display.setCursor(10, y);
+  M5.Display.printf("Symbol Bright:");
+  y += lineHeight;
+  M5.Display.setCursor(10, y);
+  M5.Display.printf("%d %%", sBright);
+  y += lineHeight + 5;
+
+  M5.Display.setCursor(10, y);
+  M5.Display.printf("BG Hue:");
+  y += lineHeight;
+  M5.Display.setCursor(10, y);
+  M5.Display.printf("%d Grad", bHue);
+  y += lineHeight + 5;
+
+  M5.Display.setCursor(10, y);
+  M5.Display.printf("BG Bright:");
+  y += lineHeight;
+  M5.Display.setCursor(10, y);
+  M5.Display.printf("%d %%", bBright);
 }
 
 // HSV zu RGB565 Konvertierung
