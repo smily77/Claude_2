@@ -24,6 +24,7 @@
 #include <M5Unified.h>
 #include "UNIT_8ENCODER.h"
 #include "fog_light_bitmap.h"
+#include "garage_door_bitmap.h"
 
 // Unit 8 Encoder
 UNIT_8ENCODER encoder;
@@ -56,8 +57,8 @@ int32_t lastEncoderValue_CH4 = 0;
 // Update-Flag
 bool needsRedraw = true;
 
-// Display-Modus (false = Symbol, true = Parameter)
-bool showParams = false;
+// Display-Modus (0 = Fog Light, 1 = Garage Door, 2 = Parameter)
+int displayMode = 0;
 
 // I2C Status
 bool encoderConnected = false;
@@ -122,11 +123,12 @@ void loop() {
   // M5Stack aktualisieren
   M5.update();
 
-  // Tastendruck: Toggle zwischen Symbol und Parameter-Anzeige
+  // Tastendruck: Zyklisch durch Modi wechseln
   if (M5.BtnA.wasPressed()) {
-    showParams = !showParams;
+    displayMode = (displayMode + 1) % 3;  // 0 -> 1 -> 2 -> 0
     needsRedraw = true;
-    Serial.printf("Display mode: %s\n", showParams ? "Parameters" : "Symbol");
+    const char* modes[] = {"Fog Light", "Garage Door", "Parameters"};
+    Serial.printf("Display mode: %s\n", modes[displayMode]);
   }
 
   if (!encoderConnected) {
@@ -220,10 +222,16 @@ void loop() {
 
   // Neuzeichnen wenn nötig
   if (needsRedraw) {
-    if (showParams) {
-      displayParameters(symbolHue, symbolBrightness, bgHue, bgBrightness);
-    } else {
-      displayFogLight(symbolHue, symbolBrightness, bgHue, bgBrightness, fog_light_icon_96x96);
+    switch (displayMode) {
+      case 0:  // Fog Light
+        displayFogLight(symbolHue, symbolBrightness, bgHue, bgBrightness, fog_light_icon_96x96);
+        break;
+      case 1:  // Garage Door
+        displayFogLight(symbolHue, symbolBrightness, bgHue, bgBrightness, garage_door_icon_96x96);
+        break;
+      case 2:  // Parameters
+        displayParameters(symbolHue, symbolBrightness, bgHue, bgBrightness);
+        break;
     }
     needsRedraw = false;
   }
