@@ -194,9 +194,9 @@ void loop() {
   if (encoderValue_CH4 != lastEncoderValue_CH4) {
     int32_t delta = encoderValue_CH4 - lastEncoderValue_CH4;
 
-    // Helligkeit ändern (2-3% pro Schritt für ~2.5% Durchschnitt)
-    int step = (delta > 0) ? 3 : -3;  // 2.5% ~ 3% für int
-    bgBrightness += (delta / 2) * step + (delta % 2) * 2;
+    // Helligkeit ändern (~2.5% pro Schritt)
+    // delta * 2 = 2% base, delta/2 = 0.5% extra (bei geraden deltas)
+    bgBrightness += delta * 2 + delta / 2;
 
     // Helligkeit begrenzen (0-100%)
     if (bgBrightness > 100) bgBrightness = 100;
