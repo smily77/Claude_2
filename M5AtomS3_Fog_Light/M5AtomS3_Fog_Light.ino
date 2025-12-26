@@ -64,11 +64,7 @@ void setup() {
   delay(100);
   Serial.println("\n=== M5Stack AtomS3 - Fog Light ===");
 
-  // I2C VOR M5.begin() initialisieren (verhindert Konflikt)
-  Wire.begin(SDA_PIN, SCL_PIN, 100000UL);
-  delay(100);
-
-  // M5Unified initialisieren
+  // M5Unified initialisieren (initialisiert auch I2C)
   auto cfg = M5.config();
   M5.begin(cfg);
 
@@ -78,6 +74,8 @@ void setup() {
 
   // I2C Scanner durchführen
   Serial.println("Scanning I2C Bus...");
+  Wire.begin(SDA_PIN, SCL_PIN, 100000UL);  // Explizit mit Pins und Frequenz
+  delay(100);
 
   scanI2C();
 
