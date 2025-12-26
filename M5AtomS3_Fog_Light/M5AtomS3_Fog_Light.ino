@@ -9,9 +9,11 @@
  * - M5Stack Unit 8 Encoder an Port.A (Grove)
  *
  * Steuerung:
- * - CH1 (Encoder 1): Farbton (Hue) durch Drehen (0-360°)
- * - CH2 (Encoder 2): Helligkeit durch Drehen (0-100%)
- * - Startposition: Blau (240°), volle Helligkeit (100%)
+ * - CH1 (Encoder 1): Symbol-Farbton (Hue) 0-360° (0.5° pro Schritt)
+ * - CH2 (Encoder 2): Symbol-Helligkeit 0-100% (2% pro Schritt)
+ * - CH3 (Encoder 3): Hintergrund-Farbton (Hue) 0-360° (1° pro Schritt)
+ * - CH4 (Encoder 4): Hintergrund-Helligkeit 0-100% (2.5% pro Schritt)
+ * - Startposition: Symbol Blau (240°) 100%, Hintergrund Schwarz (0°) 0%
  *
  * Voraussetzungen:
  * - M5Unified Bibliothek installiert
@@ -37,13 +39,19 @@ const int BITMAP_WIDTH = 96;
 const int BITMAP_HEIGHT = 96;
 const int BYTES_PER_ROW = 12;  // (96 + 7) / 8 = 12
 
-// HSV Farbsteuerung
-int currentHue = 240;          // Start: Blau (240°)
-int currentBrightness = 100;   // Start: 100% Helligkeit
+// Symbol HSV Einstellungen
+int symbolHue = 240;          // Start: Blau (240°)
+int symbolBrightness = 100;   // Start: 100% Helligkeit
+
+// Hintergrund HSV Einstellungen
+int bgHue = 0;                // Start: Rot (0°)
+int bgBrightness = 0;         // Start: 0% (Schwarz)
 
 // Encoder-Tracking
 int32_t lastEncoderValue_CH1 = 0;
 int32_t lastEncoderValue_CH2 = 0;
+int32_t lastEncoderValue_CH3 = 0;
+int32_t lastEncoderValue_CH4 = 0;
 
 // Update-Flag
 bool needsRedraw = true;
@@ -84,20 +92,27 @@ void setup() {
     delay(50);
     lastEncoderValue_CH1 = encoder.getEncoderValue(0);  // CH1
     lastEncoderValue_CH2 = encoder.getEncoderValue(1);  // CH2
+    lastEncoderValue_CH3 = encoder.getEncoderValue(2);  // CH3
+    lastEncoderValue_CH4 = encoder.getEncoderValue(3);  // CH4
 
-    Serial.printf("Initial CH1: %d, CH2: %d\n", lastEncoderValue_CH1, lastEncoderValue_CH2);
+    Serial.printf("Initial CH1: %d, CH2: %d, CH3: %d, CH4: %d\n",
+                  lastEncoderValue_CH1, lastEncoderValue_CH2,
+                  lastEncoderValue_CH3, lastEncoderValue_CH4);
   } else {
     Serial.println("✗ Encoder initialization failed!");
     encoderConnected = false;
   }
 
   // Erstes Symbol zeichnen
-  drawFogLightBitmap();
+  displayFogLight(symbolHue, symbolBrightness, bgHue, bgBrightness);
 
   Serial.println("\n=== Setup Complete ===");
-  Serial.println("CH1: Hue (0-360°)");
-  Serial.println("CH2: Brightness (0-100%)");
-  Serial.printf("Start: Hue=%d°, Brightness=%d%%\n", currentHue, currentBrightness);
+  Serial.println("CH1: Symbol Hue (0-360°, 0.5° steps)");
+  Serial.println("CH2: Symbol Brightness (0-100%, 2% steps)");
+  Serial.println("CH3: Background Hue (0-360°, 1° steps)");
+  Serial.println("CH4: Background Brightness (0-100%, 2.5% steps)");
+  Serial.printf("Start - Symbol: H=%d° B=%d%%  BG: H=%d° B=%d%%\n",
+                symbolHue, symbolBrightness, bgHue, bgBrightness);
 }
 
 void loop() {
@@ -119,55 +134,104 @@ void loop() {
     return;
   }
 
-  // CH1: Farbton (Hue) - Encoder 0
+  // CH1: Symbol Farbton (Hue) - Encoder 0
   int32_t encoderValue_CH1 = encoder.getEncoderValue(0);
   if (encoderValue_CH1 != lastEncoderValue_CH1) {
     int32_t delta = encoderValue_CH1 - lastEncoderValue_CH1;
 
-    // Hue ändern (2° pro Encoder-Schritt für feine Anpassung)
-    currentHue += (delta * 2);
+    // Hue ändern (1° pro 2 Encoder-Schritte = 0.5° pro Schritt)
+    symbolHue += delta;
+    if (delta % 2 != 0) symbolHue++;  // Rundung für 0.5° Schritte
 
     // Hue im Bereich 0-360° halten (Wraparound)
-    while (currentHue < 0) currentHue += 360;
-    while (currentHue >= 360) currentHue -= 360;
+    while (symbolHue < 0) symbolHue += 360;
+    while (symbolHue >= 360) symbolHue -= 360;
 
     lastEncoderValue_CH1 = encoderValue_CH1;
     needsRedraw = true;
 
-    Serial.printf("CH1: Hue = %d° (encoder: %d)\n", currentHue, encoderValue_CH1);
+    Serial.printf("CH1: Symbol Hue = %d°\n", symbolHue);
   }
 
-  // CH2: Helligkeit (Brightness) - Encoder 1
+  // CH2: Symbol Helligkeit - Encoder 1
   int32_t encoderValue_CH2 = encoder.getEncoderValue(1);
   if (encoderValue_CH2 != lastEncoderValue_CH2) {
     int32_t delta = encoderValue_CH2 - lastEncoderValue_CH2;
 
-    // Helligkeit ändern (5% pro Encoder-Schritt)
-    currentBrightness += (delta * 5);
+    // Helligkeit ändern (2% pro Encoder-Schritt)
+    symbolBrightness += (delta * 2);
 
     // Helligkeit begrenzen (0-100%)
-    if (currentBrightness > 100) currentBrightness = 100;
-    if (currentBrightness < 0) currentBrightness = 0;
+    if (symbolBrightness > 100) symbolBrightness = 100;
+    if (symbolBrightness < 0) symbolBrightness = 0;
 
     lastEncoderValue_CH2 = encoderValue_CH2;
     needsRedraw = true;
 
-    Serial.printf("CH2: Brightness = %d%% (encoder: %d)\n", currentBrightness, encoderValue_CH2);
+    Serial.printf("CH2: Symbol Brightness = %d%%\n", symbolBrightness);
+  }
+
+  // CH3: Hintergrund Farbton (Hue) - Encoder 2
+  int32_t encoderValue_CH3 = encoder.getEncoderValue(2);
+  if (encoderValue_CH3 != lastEncoderValue_CH3) {
+    int32_t delta = encoderValue_CH3 - lastEncoderValue_CH3;
+
+    // Hue ändern (1° pro Encoder-Schritt)
+    bgHue += delta;
+
+    // Hue im Bereich 0-360° halten (Wraparound)
+    while (bgHue < 0) bgHue += 360;
+    while (bgHue >= 360) bgHue -= 360;
+
+    lastEncoderValue_CH3 = encoderValue_CH3;
+    needsRedraw = true;
+
+    Serial.printf("CH3: Background Hue = %d°\n", bgHue);
+  }
+
+  // CH4: Hintergrund Helligkeit - Encoder 3
+  int32_t encoderValue_CH4 = encoder.getEncoderValue(3);
+  if (encoderValue_CH4 != lastEncoderValue_CH4) {
+    int32_t delta = encoderValue_CH4 - lastEncoderValue_CH4;
+
+    // Helligkeit ändern (2-3% pro Schritt für ~2.5% Durchschnitt)
+    int step = (delta > 0) ? 3 : -3;  // 2.5% ~ 3% für int
+    bgBrightness += (delta / 2) * step + (delta % 2) * 2;
+
+    // Helligkeit begrenzen (0-100%)
+    if (bgBrightness > 100) bgBrightness = 100;
+    if (bgBrightness < 0) bgBrightness = 0;
+
+    lastEncoderValue_CH4 = encoderValue_CH4;
+    needsRedraw = true;
+
+    Serial.printf("CH4: Background Brightness = %d%%\n", bgBrightness);
   }
 
   // Neuzeichnen wenn nötig
   if (needsRedraw) {
-    M5.Display.fillScreen(TFT_BLACK);
-    drawFogLightBitmap();
+    displayFogLight(symbolHue, symbolBrightness, bgHue, bgBrightness);
     needsRedraw = false;
   }
 
   delay(10);
 }
 
-void drawFogLightBitmap() {
-  // HSV zu RGB konvertieren mit aktueller Helligkeit
-  uint16_t displayColor = hsvToRgb565(currentHue, 100, currentBrightness);
+/**
+ * Zeigt das Nebelschlussleuchtensymbol mit individuellen Farben
+ *
+ * @param sHue    Symbol Farbton (0-360°)
+ * @param sBright Symbol Helligkeit (0-100%)
+ * @param bHue    Hintergrund Farbton (0-360°)
+ * @param bBright Hintergrund Helligkeit (0-100%)
+ */
+void displayFogLight(int sHue, int sBright, int bHue, int bBright) {
+  // Farben berechnen
+  uint16_t symbolColor = hsvToRgb565(sHue, 100, sBright);
+  uint16_t bgColor = hsvToRgb565(bHue, 100, bBright);
+
+  // Hintergrund mit gewählter Farbe füllen
+  M5.Display.fillScreen(bgColor);
 
   // Bitmap zentriert auf dem 128x128 Display zeichnen
   int offsetX = (128 - BITMAP_WIDTH) / 2;
@@ -180,12 +244,14 @@ void drawFogLightBitmap() {
       int byteIndex = y * BYTES_PER_ROW + (x / 8);
       int bitPosition = 7 - (x % 8);
 
-      // Bit auslesen (0 = Symbol zeichnen)
-      bool pixelSet = (fog_light_icon_96x96[byteIndex] >> bitPosition) & 0x01;
+      // Bit auslesen (0 = Symbol zeichnen, 1 = Hintergrund)
+      bool isBackground = (fog_light_icon_96x96[byteIndex] >> bitPosition) & 0x01;
 
-      if (!pixelSet) {
-        M5.Display.drawPixel(offsetX + x, offsetY + y, displayColor);
+      if (!isBackground) {
+        // Symbol-Pixel zeichnen
+        M5.Display.drawPixel(offsetX + x, offsetY + y, symbolColor);
       }
+      // Hintergrund wurde bereits durch fillScreen gesetzt
     }
   }
 }
