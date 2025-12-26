@@ -282,46 +282,36 @@ void displayFogLight(int sHue, int sBright, int bHue, int bBright, const unsigne
 void displayParameters(int sHue, int sBright, int bHue, int bBright) {
   M5.Display.fillScreen(TFT_BLACK);
   M5.Display.setTextColor(TFT_WHITE);
-  M5.Display.setTextSize(1);
+  M5.Display.setTextSize(2);
 
   int y = 5;
-  int lineHeight = 12;
+  int lineHeight = 20;
 
   // Titel
-  M5.Display.setCursor(5, y);
-  M5.Display.println("== Parameter ==");
-  y += lineHeight + 3;
+  M5.Display.setCursor(10, y);
+  M5.Display.println("== Param ==");
+  y += lineHeight + 5;
 
   // Symbol Hue
-  M5.Display.setCursor(5, y);
-  M5.Display.printf("Sym Hue:");
-  y += lineHeight;
   M5.Display.setCursor(10, y);
-  M5.Display.printf("%d Grad", sHue);
-  y += lineHeight + 1;
+  M5.Display.printf("SH: %d", sHue);
+  M5.Display.print((char)248);  // Grad-Symbol
+  y += lineHeight;
 
   // Symbol Brightness
-  M5.Display.setCursor(5, y);
-  M5.Display.printf("Sym Bright:");
-  y += lineHeight;
   M5.Display.setCursor(10, y);
-  M5.Display.printf("%d %%", sBright);
-  y += lineHeight + 3;
+  M5.Display.printf("SB: %d%%", sBright);
+  y += lineHeight;
 
   // Background Hue
-  M5.Display.setCursor(5, y);
-  M5.Display.printf("BG Hue:");
-  y += lineHeight;
   M5.Display.setCursor(10, y);
-  M5.Display.printf("%d Grad", bHue);
-  y += lineHeight + 1;
+  M5.Display.printf("BH: %d", bHue);
+  M5.Display.print((char)248);  // Grad-Symbol
+  y += lineHeight;
 
   // Background Brightness
-  M5.Display.setCursor(5, y);
-  M5.Display.printf("BG Bright:");
-  y += lineHeight;
   M5.Display.setCursor(10, y);
-  M5.Display.printf("%d %%", bBright);
+  M5.Display.printf("BB: %d%%", bBright);
 }
 
 // HSV zu RGB565 Konvertierung
