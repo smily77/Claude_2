@@ -3,10 +3,10 @@
 Konvertiert ein Bild in ein 1-Bit Bitmap-Array für Arduino
 """
 
-from PIL import Image
+from PIL import Image, ImageFilter
 import sys
 
-def image_to_1bit_array(image_path, output_size=96, threshold=128):
+def image_to_1bit_array(image_path, output_size=96, threshold=128, dilate=0):
     """
     Konvertiert ein Bild in ein 1-Bit Bitmap-Array
 
@@ -14,6 +14,7 @@ def image_to_1bit_array(image_path, output_size=96, threshold=128):
         image_path: Pfad zum Eingabebild
         output_size: Zielgröße (quadratisch)
         threshold: Schwellwert für Schwarz/Weiß (0-255)
+        dilate: Anzahl der Dilation-Durchläufe (verdickt Linien)
     """
     # Bild laden
     img = Image.open(image_path)
@@ -23,6 +24,10 @@ def image_to_1bit_array(image_path, output_size=96, threshold=128):
 
     # Größe anpassen (mit Antialiasing)
     img = img.resize((output_size, output_size), Image.Resampling.LANCZOS)
+
+    # Optional: Dilation anwenden um Linien zu verdicken
+    for _ in range(dilate):
+        img = img.filter(ImageFilter.MaxFilter(3))
 
     # Optional: Bild speichern zur Überprüfung
     img.save(image_path.replace('.png', '_resized.png'))
@@ -74,11 +79,12 @@ def image_to_1bit_array(image_path, output_size=96, threshold=128):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python3 convert_image.py <image_path> [size] [threshold]")
+        print("Usage: python3 convert_image.py <image_path> [size] [threshold] [dilate]")
         sys.exit(1)
 
     image_path = sys.argv[1]
     size = int(sys.argv[2]) if len(sys.argv) > 2 else 96
     threshold = int(sys.argv[3]) if len(sys.argv) > 3 else 128
+    dilate = int(sys.argv[4]) if len(sys.argv) > 4 else 0
 
-    image_to_1bit_array(image_path, size, threshold)
+    image_to_1bit_array(image_path, size, threshold, dilate)
