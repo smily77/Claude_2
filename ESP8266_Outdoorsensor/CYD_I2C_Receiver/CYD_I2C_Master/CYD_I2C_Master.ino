@@ -675,11 +675,27 @@ void loadOutdoorGraphDataFromCSV() {
         return;
     }
 
-    const int MAX_LINES = 3000;
-    float* tempData = (float*)malloc(MAX_LINES * sizeof(float));
-    float* pressData = (float*)malloc(MAX_LINES * sizeof(float));
-    uint16_t* batteryData = (uint16_t*)malloc(MAX_LINES * sizeof(uint16_t));
-    bool* midnightData = (bool*)malloc(MAX_LINES * sizeof(bool));
+    // Kleinere Allokation: Max 500 Zeilen statt 3000 (spart 80% RAM)
+    // 500 Zeilen = ~2 Tage, genug für die meisten Fälle
+    const int MAX_BUFFER = 500;
+
+    // Allokiere Speicher mit NULL-Checks
+    float* tempData = (float*)malloc(MAX_BUFFER * sizeof(float));
+    float* pressData = (float*)malloc(MAX_BUFFER * sizeof(float));
+    uint16_t* batteryData = (uint16_t*)malloc(MAX_BUFFER * sizeof(uint16_t));
+    bool* midnightData = (bool*)malloc(MAX_BUFFER * sizeof(bool));
+
+    if (!tempData || !pressData || !batteryData || !midnightData) {
+        Serial.println("[Graph] Memory allocation failed!");
+        if (tempData) free(tempData);
+        if (pressData) free(pressData);
+        if (batteryData) free(batteryData);
+        if (midnightData) free(midnightData);
+        graphData.outdoorLoaded = false;
+        graphData.dataCount = 0;
+        return;
+    }
+
     int totalLines = 0;
     int lastHour = -1;
 
@@ -692,7 +708,7 @@ void loadOutdoorGraphDataFromCSV() {
         if (file) {
             file.readStringUntil('\n');  // Header überspringen
 
-            while (file.available() && currentMonthLines < MAX_LINES) {
+            while (file.available() && currentMonthLines < MAX_BUFFER) {
                 String line = file.readStringUntil('\n');
                 int idx1 = line.indexOf(',');
                 int idx2 = line.indexOf(',', idx1 + 1);
@@ -725,69 +741,85 @@ void loadOutdoorGraphDataFromCSV() {
         String prevFilename = "/" + prevMonth + "_outdoor.csv";
 
         if (prevMonth != "unknown" && SD.exists(prevFilename)) {
-            // Temporäre Arrays für Vormonat
-            float* prevTemp = (float*)malloc(MAX_LINES * sizeof(float));
-            float* prevPress = (float*)malloc(MAX_LINES * sizeof(float));
-            uint16_t* prevBatt = (uint16_t*)malloc(MAX_LINES * sizeof(uint16_t));
-            bool* prevMidnight = (bool*)malloc(MAX_LINES * sizeof(bool));
-            int prevLines = 0;
-            int prevLastHour = -1;
+            // Nur soviel allozieren wie maximal benötigt wird
+            int needed = GRAPH_DATA_POINTS - currentMonthLines;
+            int prevBufferSize = (needed < MAX_BUFFER) ? needed : MAX_BUFFER;
 
-            File file = SD.open(prevFilename, FILE_READ);
-            if (file) {
-                file.readStringUntil('\n');  // Header überspringen
+            float* prevTemp = (float*)malloc(prevBufferSize * sizeof(float));
+            float* prevPress = (float*)malloc(prevBufferSize * sizeof(float));
+            uint16_t* prevBatt = (uint16_t*)malloc(prevBufferSize * sizeof(uint16_t));
+            bool* prevMidnight = (bool*)malloc(prevBufferSize * sizeof(bool));
 
-                while (file.available() && prevLines < MAX_LINES) {
-                    String line = file.readStringUntil('\n');
-                    int idx1 = line.indexOf(',');
-                    int idx2 = line.indexOf(',', idx1 + 1);
-                    int idx3 = line.indexOf(',', idx2 + 1);
-                    int idx4 = line.indexOf(',', idx3 + 1);
+            if (!prevTemp || !prevPress || !prevBatt || !prevMidnight) {
+                Serial.println("[Graph] Prev month allocation failed - using current month only");
+                if (prevTemp) free(prevTemp);
+                if (prevPress) free(prevPress);
+                if (prevBatt) free(prevBatt);
+                if (prevMidnight) free(prevMidnight);
+            } else {
+                int prevLines = 0;
+                int prevLastHour = -1;
 
-                    if (idx1 > 0 && idx2 > 0 && idx3 > 0 && idx4 > 0) {
-                        String dateTime = line.substring(0, idx1);
-                        int hourIdx = dateTime.indexOf(' ') + 1;
-                        int hour = dateTime.substring(hourIdx, hourIdx + 2).toInt();
+                File file = SD.open(prevFilename, FILE_READ);
+                if (file) {
+                    file.readStringUntil('\n');  // Header überspringen
 
-                        prevTemp[prevLines] = line.substring(idx1 + 1, idx2).toFloat();
-                        prevPress[prevLines] = line.substring(idx2 + 1, idx3).toFloat();
-                        prevBatt[prevLines] = line.substring(idx3 + 1, idx4).toInt();
-                        prevMidnight[prevLines] = (hour == 0 && prevLastHour != 0);
-                        prevLastHour = hour;
-                        prevLines++;
+                    while (file.available() && prevLines < prevBufferSize) {
+                        String line = file.readStringUntil('\n');
+                        int idx1 = line.indexOf(',');
+                        int idx2 = line.indexOf(',', idx1 + 1);
+                        int idx3 = line.indexOf(',', idx2 + 1);
+                        int idx4 = line.indexOf(',', idx3 + 1);
+
+                        if (idx1 > 0 && idx2 > 0 && idx3 > 0 && idx4 > 0) {
+                            String dateTime = line.substring(0, idx1);
+                            int hourIdx = dateTime.indexOf(' ') + 1;
+                            int hour = dateTime.substring(hourIdx, hourIdx + 2).toInt();
+
+                            prevTemp[prevLines] = line.substring(idx1 + 1, idx2).toFloat();
+                            prevPress[prevLines] = line.substring(idx2 + 1, idx3).toFloat();
+                            prevBatt[prevLines] = line.substring(idx3 + 1, idx4).toInt();
+                            prevMidnight[prevLines] = (hour == 0 && prevLastHour != 0);
+                            prevLastHour = hour;
+                            prevLines++;
+                        }
+                    }
+                    file.close();
+
+                    // Fehlende Anzahl aus Vormonat nehmen
+                    int prevStart = (prevLines > needed) ? (prevLines - needed) : 0;
+                    int prevCount = prevLines - prevStart;
+
+                    // Prüfe ob genug Platz im Buffer
+                    if (currentMonthLines + prevCount <= MAX_BUFFER) {
+                        // Aktuelle Daten nach hinten verschieben
+                        for (int i = currentMonthLines - 1; i >= 0; i--) {
+                            tempData[i + prevCount] = tempData[i];
+                            pressData[i + prevCount] = pressData[i];
+                            batteryData[i + prevCount] = batteryData[i];
+                            midnightData[i + prevCount] = midnightData[i];
+                        }
+
+                        // Vormonatsdaten an den Anfang kopieren
+                        for (int i = 0; i < prevCount; i++) {
+                            tempData[i] = prevTemp[prevStart + i];
+                            pressData[i] = prevPress[prevStart + i];
+                            batteryData[i] = prevBatt[prevStart + i];
+                            midnightData[i] = prevMidnight[prevStart + i];
+                        }
+
+                        totalLines = prevCount + currentMonthLines;
+                        Serial.printf("[Graph] Added %d lines from previous month (%s)\n", prevCount, prevFilename.c_str());
+                    } else {
+                        Serial.println("[Graph] Buffer overflow prevented - using current month only");
                     }
                 }
-                file.close();
 
-                // Fehlende Anzahl aus Vormonat nehmen
-                int needed = GRAPH_DATA_POINTS - currentMonthLines;
-                int prevStart = (prevLines > needed) ? (prevLines - needed) : 0;
-                int prevCount = prevLines - prevStart;
-
-                // Aktuelle Daten nach hinten verschieben
-                for (int i = currentMonthLines - 1; i >= 0; i--) {
-                    tempData[i + prevCount] = tempData[i];
-                    pressData[i + prevCount] = pressData[i];
-                    batteryData[i + prevCount] = batteryData[i];
-                    midnightData[i + prevCount] = midnightData[i];
-                }
-
-                // Vormonatsdaten an den Anfang kopieren
-                for (int i = 0; i < prevCount; i++) {
-                    tempData[i] = prevTemp[prevStart + i];
-                    pressData[i] = prevPress[prevStart + i];
-                    batteryData[i] = prevBatt[prevStart + i];
-                    midnightData[i] = prevMidnight[prevStart + i];
-                }
-
-                totalLines = prevCount + currentMonthLines;
-                Serial.printf("[Graph] Added %d lines from previous month (%s)\n", prevCount, prevFilename.c_str());
+                free(prevMidnight);
+                free(prevBatt);
+                free(prevPress);
+                free(prevTemp);
             }
-
-            free(prevMidnight);
-            free(prevBatt);
-            free(prevPress);
-            free(prevTemp);
         }
     }
 
@@ -825,8 +857,18 @@ void loadIndoorGraphDataFromCSV() {
         return;
     }
 
-    const int MAX_LINES = 3000;
-    uint16_t* batteryData = (uint16_t*)malloc(MAX_LINES * sizeof(uint16_t));
+    // Kleinere Allokation: Max 500 Zeilen statt 3000 (spart 80% RAM)
+    const int MAX_BUFFER = 500;
+
+    // Allokiere Speicher mit NULL-Check
+    uint16_t* batteryData = (uint16_t*)malloc(MAX_BUFFER * sizeof(uint16_t));
+
+    if (!batteryData) {
+        Serial.println("[Graph] Indoor memory allocation failed!");
+        graphData.indoorLoaded = false;
+        return;
+    }
+
     int totalLines = 0;
 
     // Aktuelle Monatsdatei lesen
@@ -838,7 +880,7 @@ void loadIndoorGraphDataFromCSV() {
         if (file) {
             file.readStringUntil('\n');  // Header überspringen
 
-            while (file.available() && currentMonthLines < MAX_LINES) {
+            while (file.available() && currentMonthLines < MAX_BUFFER) {
                 String line = file.readStringUntil('\n');
                 int idx1 = line.indexOf(',');
                 int idx2 = line.indexOf(',', idx1 + 1);
@@ -864,48 +906,61 @@ void loadIndoorGraphDataFromCSV() {
         String prevFilename = "/" + prevMonth + "_indoor.csv";
 
         if (prevMonth != "unknown" && SD.exists(prevFilename)) {
-            uint16_t* prevBatt = (uint16_t*)malloc(MAX_LINES * sizeof(uint16_t));
-            int prevLines = 0;
+            // Nur soviel allozieren wie maximal benötigt wird
+            int needed = GRAPH_DATA_POINTS - currentMonthLines;
+            int prevBufferSize = (needed < MAX_BUFFER) ? needed : MAX_BUFFER;
 
-            File file = SD.open(prevFilename, FILE_READ);
-            if (file) {
-                file.readStringUntil('\n');  // Header überspringen
+            uint16_t* prevBatt = (uint16_t*)malloc(prevBufferSize * sizeof(uint16_t));
 
-                while (file.available() && prevLines < MAX_LINES) {
-                    String line = file.readStringUntil('\n');
-                    int idx1 = line.indexOf(',');
-                    int idx2 = line.indexOf(',', idx1 + 1);
-                    int idx3 = line.indexOf(',', idx2 + 1);
-                    int idx4 = line.indexOf(',', idx3 + 1);
-                    int idx5 = line.indexOf(',', idx4 + 1);
+            if (!prevBatt) {
+                Serial.println("[Graph] Indoor prev month allocation failed - using current month only");
+            } else {
+                int prevLines = 0;
 
-                    if (idx1 > 0 && idx5 > 0) {
-                        prevBatt[prevLines] = line.substring(idx4 + 1, idx5).toInt();
-                        prevLines++;
+                File file = SD.open(prevFilename, FILE_READ);
+                if (file) {
+                    file.readStringUntil('\n');  // Header überspringen
+
+                    while (file.available() && prevLines < prevBufferSize) {
+                        String line = file.readStringUntil('\n');
+                        int idx1 = line.indexOf(',');
+                        int idx2 = line.indexOf(',', idx1 + 1);
+                        int idx3 = line.indexOf(',', idx2 + 1);
+                        int idx4 = line.indexOf(',', idx3 + 1);
+                        int idx5 = line.indexOf(',', idx4 + 1);
+
+                        if (idx1 > 0 && idx5 > 0) {
+                            prevBatt[prevLines] = line.substring(idx4 + 1, idx5).toInt();
+                            prevLines++;
+                        }
+                    }
+                    file.close();
+
+                    // Fehlende Anzahl aus Vormonat nehmen
+                    int prevStart = (prevLines > needed) ? (prevLines - needed) : 0;
+                    int prevCount = prevLines - prevStart;
+
+                    // Prüfe ob genug Platz im Buffer
+                    if (currentMonthLines + prevCount <= MAX_BUFFER) {
+                        // Aktuelle Daten nach hinten verschieben
+                        for (int i = currentMonthLines - 1; i >= 0; i--) {
+                            batteryData[i + prevCount] = batteryData[i];
+                        }
+
+                        // Vormonatsdaten an den Anfang kopieren
+                        for (int i = 0; i < prevCount; i++) {
+                            batteryData[i] = prevBatt[prevStart + i];
+                        }
+
+                        totalLines = prevCount + currentMonthLines;
+                        Serial.printf("[Graph] Added %d lines from previous month (%s)\n", prevCount, prevFilename.c_str());
+                    } else {
+                        Serial.println("[Graph] Indoor buffer overflow prevented - using current month only");
                     }
                 }
-                file.close();
 
-                // Fehlende Anzahl aus Vormonat nehmen
-                int needed = GRAPH_DATA_POINTS - currentMonthLines;
-                int prevStart = (prevLines > needed) ? (prevLines - needed) : 0;
-                int prevCount = prevLines - prevStart;
-
-                // Aktuelle Daten nach hinten verschieben
-                for (int i = currentMonthLines - 1; i >= 0; i--) {
-                    batteryData[i + prevCount] = batteryData[i];
-                }
-
-                // Vormonatsdaten an den Anfang kopieren
-                for (int i = 0; i < prevCount; i++) {
-                    batteryData[i] = prevBatt[prevStart + i];
-                }
-
-                totalLines = prevCount + currentMonthLines;
-                Serial.printf("[Graph] Added %d lines from previous month (%s)\n", prevCount, prevFilename.c_str());
+                free(prevBatt);
             }
-
-            free(prevBatt);
         }
     }
 
