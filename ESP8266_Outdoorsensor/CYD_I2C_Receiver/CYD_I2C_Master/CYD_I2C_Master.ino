@@ -704,32 +704,57 @@ void loadOutdoorGraphDataFromCSV() {
     int currentMonthLines = 0;
 
     if (SD.exists(filename)) {
+        // Pass 1: Zeilen zählen
         File file = SD.open(filename, FILE_READ);
         if (file) {
             file.readStringUntil('\n');  // Header überspringen
+            int totalFileLines = 0;
 
-            while (file.available() && currentMonthLines < MAX_BUFFER) {
+            while (file.available()) {
                 String line = file.readStringUntil('\n');
-                int idx1 = line.indexOf(',');
-                int idx2 = line.indexOf(',', idx1 + 1);
-                int idx3 = line.indexOf(',', idx2 + 1);
-                int idx4 = line.indexOf(',', idx3 + 1);
-
-                if (idx1 > 0 && idx2 > 0 && idx3 > 0 && idx4 > 0) {
-                    String dateTime = line.substring(0, idx1);
-                    int hourIdx = dateTime.indexOf(' ') + 1;
-                    int hour = dateTime.substring(hourIdx, hourIdx + 2).toInt();
-
-                    tempData[currentMonthLines] = line.substring(idx1 + 1, idx2).toFloat();
-                    pressData[currentMonthLines] = line.substring(idx2 + 1, idx3).toFloat();
-                    batteryData[currentMonthLines] = line.substring(idx3 + 1, idx4).toInt();
-                    midnightData[currentMonthLines] = (hour == 0 && lastHour != 0);
-                    lastHour = hour;
-                    currentMonthLines++;
+                if (line.length() > 10) {  // Nur gültige Zeilen zählen
+                    totalFileLines++;
                 }
             }
             file.close();
-            Serial.printf("[Graph] Current month (%s): %d lines\n", filename.c_str(), currentMonthLines);
+
+            // Pass 2: Die letzten MAX_BUFFER Zeilen lesen
+            int skipLines = (totalFileLines > MAX_BUFFER) ? (totalFileLines - MAX_BUFFER) : 0;
+            Serial.printf("[Graph] File has %d lines, skipping first %d\n", totalFileLines, skipLines);
+
+            file = SD.open(filename, FILE_READ);
+            if (file) {
+                file.readStringUntil('\n');  // Header überspringen
+
+                // Skip erste N Zeilen
+                for (int i = 0; i < skipLines; i++) {
+                    file.readStringUntil('\n');
+                }
+
+                // Jetzt die letzten MAX_BUFFER Zeilen lesen
+                while (file.available() && currentMonthLines < MAX_BUFFER) {
+                    String line = file.readStringUntil('\n');
+                    int idx1 = line.indexOf(',');
+                    int idx2 = line.indexOf(',', idx1 + 1);
+                    int idx3 = line.indexOf(',', idx2 + 1);
+                    int idx4 = line.indexOf(',', idx3 + 1);
+
+                    if (idx1 > 0 && idx2 > 0 && idx3 > 0 && idx4 > 0) {
+                        String dateTime = line.substring(0, idx1);
+                        int hourIdx = dateTime.indexOf(' ') + 1;
+                        int hour = dateTime.substring(hourIdx, hourIdx + 2).toInt();
+
+                        tempData[currentMonthLines] = line.substring(idx1 + 1, idx2).toFloat();
+                        pressData[currentMonthLines] = line.substring(idx2 + 1, idx3).toFloat();
+                        batteryData[currentMonthLines] = line.substring(idx3 + 1, idx4).toInt();
+                        midnightData[currentMonthLines] = (hour == 0 && lastHour != 0);
+                        lastHour = hour;
+                        currentMonthLines++;
+                    }
+                }
+                file.close();
+                Serial.printf("[Graph] Current month (%s): %d lines loaded\n", filename.c_str(), currentMonthLines);
+            }
         }
     }
 
@@ -760,59 +785,83 @@ void loadOutdoorGraphDataFromCSV() {
                 int prevLines = 0;
                 int prevLastHour = -1;
 
+                // Pass 1: Zeilen zählen
                 File file = SD.open(prevFilename, FILE_READ);
                 if (file) {
                     file.readStringUntil('\n');  // Header überspringen
+                    int totalPrevLines = 0;
 
-                    while (file.available() && prevLines < prevBufferSize) {
+                    while (file.available()) {
                         String line = file.readStringUntil('\n');
-                        int idx1 = line.indexOf(',');
-                        int idx2 = line.indexOf(',', idx1 + 1);
-                        int idx3 = line.indexOf(',', idx2 + 1);
-                        int idx4 = line.indexOf(',', idx3 + 1);
-
-                        if (idx1 > 0 && idx2 > 0 && idx3 > 0 && idx4 > 0) {
-                            String dateTime = line.substring(0, idx1);
-                            int hourIdx = dateTime.indexOf(' ') + 1;
-                            int hour = dateTime.substring(hourIdx, hourIdx + 2).toInt();
-
-                            prevTemp[prevLines] = line.substring(idx1 + 1, idx2).toFloat();
-                            prevPress[prevLines] = line.substring(idx2 + 1, idx3).toFloat();
-                            prevBatt[prevLines] = line.substring(idx3 + 1, idx4).toInt();
-                            prevMidnight[prevLines] = (hour == 0 && prevLastHour != 0);
-                            prevLastHour = hour;
-                            prevLines++;
+                        if (line.length() > 10) {
+                            totalPrevLines++;
                         }
                     }
                     file.close();
 
-                    // Fehlende Anzahl aus Vormonat nehmen
-                    int prevStart = (prevLines > needed) ? (prevLines - needed) : 0;
-                    int prevCount = prevLines - prevStart;
+                    // Pass 2: Die letzten prevBufferSize Zeilen lesen
+                    int skipPrevLines = (totalPrevLines > prevBufferSize) ? (totalPrevLines - prevBufferSize) : 0;
+                    Serial.printf("[Graph] Prev file has %d lines, skipping first %d\n", totalPrevLines, skipPrevLines);
 
-                    // Prüfe ob genug Platz im Buffer
-                    if (currentMonthLines + prevCount <= MAX_BUFFER) {
-                        // Aktuelle Daten nach hinten verschieben
-                        for (int i = currentMonthLines - 1; i >= 0; i--) {
-                            tempData[i + prevCount] = tempData[i];
-                            pressData[i + prevCount] = pressData[i];
-                            batteryData[i + prevCount] = batteryData[i];
-                            midnightData[i + prevCount] = midnightData[i];
+                    file = SD.open(prevFilename, FILE_READ);
+                    if (file) {
+                        file.readStringUntil('\n');  // Header überspringen
+
+                        // Skip erste N Zeilen
+                        for (int i = 0; i < skipPrevLines; i++) {
+                            file.readStringUntil('\n');
                         }
 
-                        // Vormonatsdaten an den Anfang kopieren
-                        for (int i = 0; i < prevCount; i++) {
-                            tempData[i] = prevTemp[prevStart + i];
-                            pressData[i] = prevPress[prevStart + i];
-                            batteryData[i] = prevBatt[prevStart + i];
-                            midnightData[i] = prevMidnight[prevStart + i];
-                        }
+                        // Jetzt die letzten prevBufferSize Zeilen lesen
+                        while (file.available() && prevLines < prevBufferSize) {
+                            String line = file.readStringUntil('\n');
+                            int idx1 = line.indexOf(',');
+                            int idx2 = line.indexOf(',', idx1 + 1);
+                            int idx3 = line.indexOf(',', idx2 + 1);
+                            int idx4 = line.indexOf(',', idx3 + 1);
 
-                        totalLines = prevCount + currentMonthLines;
-                        Serial.printf("[Graph] Added %d lines from previous month (%s)\n", prevCount, prevFilename.c_str());
-                    } else {
-                        Serial.println("[Graph] Buffer overflow prevented - using current month only");
+                            if (idx1 > 0 && idx2 > 0 && idx3 > 0 && idx4 > 0) {
+                                String dateTime = line.substring(0, idx1);
+                                int hourIdx = dateTime.indexOf(' ') + 1;
+                                int hour = dateTime.substring(hourIdx, hourIdx + 2).toInt();
+
+                                prevTemp[prevLines] = line.substring(idx1 + 1, idx2).toFloat();
+                                prevPress[prevLines] = line.substring(idx2 + 1, idx3).toFloat();
+                                prevBatt[prevLines] = line.substring(idx3 + 1, idx4).toInt();
+                                prevMidnight[prevLines] = (hour == 0 && prevLastHour != 0);
+                                prevLastHour = hour;
+                                prevLines++;
+                            }
+                        }
+                        file.close();
                     }
+                }
+
+                // Alle gelesenen Zeilen verwenden (keine weiteren Berechnungen nötig)
+                int prevCount = prevLines;
+
+                // Prüfe ob genug Platz im Buffer
+                if (currentMonthLines + prevCount <= MAX_BUFFER) {
+                    // Aktuelle Daten nach hinten verschieben
+                    for (int i = currentMonthLines - 1; i >= 0; i--) {
+                        tempData[i + prevCount] = tempData[i];
+                        pressData[i + prevCount] = pressData[i];
+                        batteryData[i + prevCount] = batteryData[i];
+                        midnightData[i + prevCount] = midnightData[i];
+                    }
+
+                    // Vormonatsdaten an den Anfang kopieren (bereits die richtigen Zeilen gelesen)
+                    for (int i = 0; i < prevCount; i++) {
+                        tempData[i] = prevTemp[i];
+                        pressData[i] = prevPress[i];
+                        batteryData[i] = prevBatt[i];
+                        midnightData[i] = prevMidnight[i];
+                    }
+
+                    totalLines = prevCount + currentMonthLines;
+                    Serial.printf("[Graph] Added %d lines from previous month (%s)\n", prevCount, prevFilename.c_str());
+                } else {
+                    Serial.println("[Graph] Buffer overflow prevented - using current month only");
                 }
 
                 free(prevMidnight);
@@ -876,25 +925,50 @@ void loadIndoorGraphDataFromCSV() {
     int currentMonthLines = 0;
 
     if (SD.exists(filename)) {
+        // Pass 1: Zeilen zählen
         File file = SD.open(filename, FILE_READ);
         if (file) {
             file.readStringUntil('\n');  // Header überspringen
+            int totalFileLines = 0;
 
-            while (file.available() && currentMonthLines < MAX_BUFFER) {
+            while (file.available()) {
                 String line = file.readStringUntil('\n');
-                int idx1 = line.indexOf(',');
-                int idx2 = line.indexOf(',', idx1 + 1);
-                int idx3 = line.indexOf(',', idx2 + 1);
-                int idx4 = line.indexOf(',', idx3 + 1);
-                int idx5 = line.indexOf(',', idx4 + 1);
-
-                if (idx1 > 0 && idx5 > 0) {
-                    batteryData[currentMonthLines] = line.substring(idx4 + 1, idx5).toInt();
-                    currentMonthLines++;
+                if (line.length() > 10) {
+                    totalFileLines++;
                 }
             }
             file.close();
-            Serial.printf("[Graph] Current month (%s): %d lines\n", filename.c_str(), currentMonthLines);
+
+            // Pass 2: Die letzten MAX_BUFFER Zeilen lesen
+            int skipLines = (totalFileLines > MAX_BUFFER) ? (totalFileLines - MAX_BUFFER) : 0;
+            Serial.printf("[Graph] Indoor file has %d lines, skipping first %d\n", totalFileLines, skipLines);
+
+            file = SD.open(filename, FILE_READ);
+            if (file) {
+                file.readStringUntil('\n');  // Header überspringen
+
+                // Skip erste N Zeilen
+                for (int i = 0; i < skipLines; i++) {
+                    file.readStringUntil('\n');
+                }
+
+                // Jetzt die letzten MAX_BUFFER Zeilen lesen
+                while (file.available() && currentMonthLines < MAX_BUFFER) {
+                    String line = file.readStringUntil('\n');
+                    int idx1 = line.indexOf(',');
+                    int idx2 = line.indexOf(',', idx1 + 1);
+                    int idx3 = line.indexOf(',', idx2 + 1);
+                    int idx4 = line.indexOf(',', idx3 + 1);
+                    int idx5 = line.indexOf(',', idx4 + 1);
+
+                    if (idx1 > 0 && idx5 > 0) {
+                        batteryData[currentMonthLines] = line.substring(idx4 + 1, idx5).toInt();
+                        currentMonthLines++;
+                    }
+                }
+                file.close();
+                Serial.printf("[Graph] Indoor current month: %d lines loaded\n", currentMonthLines);
+            }
         }
     }
 
@@ -917,46 +991,70 @@ void loadIndoorGraphDataFromCSV() {
             } else {
                 int prevLines = 0;
 
+                // Pass 1: Zeilen zählen
                 File file = SD.open(prevFilename, FILE_READ);
                 if (file) {
                     file.readStringUntil('\n');  // Header überspringen
+                    int totalPrevLines = 0;
 
-                    while (file.available() && prevLines < prevBufferSize) {
+                    while (file.available()) {
                         String line = file.readStringUntil('\n');
-                        int idx1 = line.indexOf(',');
-                        int idx2 = line.indexOf(',', idx1 + 1);
-                        int idx3 = line.indexOf(',', idx2 + 1);
-                        int idx4 = line.indexOf(',', idx3 + 1);
-                        int idx5 = line.indexOf(',', idx4 + 1);
-
-                        if (idx1 > 0 && idx5 > 0) {
-                            prevBatt[prevLines] = line.substring(idx4 + 1, idx5).toInt();
-                            prevLines++;
+                        if (line.length() > 10) {
+                            totalPrevLines++;
                         }
                     }
                     file.close();
 
-                    // Fehlende Anzahl aus Vormonat nehmen
-                    int prevStart = (prevLines > needed) ? (prevLines - needed) : 0;
-                    int prevCount = prevLines - prevStart;
+                    // Pass 2: Die letzten prevBufferSize Zeilen lesen
+                    int skipPrevLines = (totalPrevLines > prevBufferSize) ? (totalPrevLines - prevBufferSize) : 0;
+                    Serial.printf("[Graph] Indoor prev file has %d lines, skipping first %d\n", totalPrevLines, skipPrevLines);
 
-                    // Prüfe ob genug Platz im Buffer
-                    if (currentMonthLines + prevCount <= MAX_BUFFER) {
-                        // Aktuelle Daten nach hinten verschieben
-                        for (int i = currentMonthLines - 1; i >= 0; i--) {
-                            batteryData[i + prevCount] = batteryData[i];
+                    file = SD.open(prevFilename, FILE_READ);
+                    if (file) {
+                        file.readStringUntil('\n');  // Header überspringen
+
+                        // Skip erste N Zeilen
+                        for (int i = 0; i < skipPrevLines; i++) {
+                            file.readStringUntil('\n');
                         }
 
-                        // Vormonatsdaten an den Anfang kopieren
-                        for (int i = 0; i < prevCount; i++) {
-                            batteryData[i] = prevBatt[prevStart + i];
-                        }
+                        // Jetzt die letzten prevBufferSize Zeilen lesen
+                        while (file.available() && prevLines < prevBufferSize) {
+                            String line = file.readStringUntil('\n');
+                            int idx1 = line.indexOf(',');
+                            int idx2 = line.indexOf(',', idx1 + 1);
+                            int idx3 = line.indexOf(',', idx2 + 1);
+                            int idx4 = line.indexOf(',', idx3 + 1);
+                            int idx5 = line.indexOf(',', idx4 + 1);
 
-                        totalLines = prevCount + currentMonthLines;
-                        Serial.printf("[Graph] Added %d lines from previous month (%s)\n", prevCount, prevFilename.c_str());
-                    } else {
-                        Serial.println("[Graph] Indoor buffer overflow prevented - using current month only");
+                            if (idx1 > 0 && idx5 > 0) {
+                                prevBatt[prevLines] = line.substring(idx4 + 1, idx5).toInt();
+                                prevLines++;
+                            }
+                        }
+                        file.close();
                     }
+                }
+
+                // Alle gelesenen Zeilen verwenden
+                int prevCount = prevLines;
+
+                // Prüfe ob genug Platz im Buffer
+                if (currentMonthLines + prevCount <= MAX_BUFFER) {
+                    // Aktuelle Daten nach hinten verschieben
+                    for (int i = currentMonthLines - 1; i >= 0; i--) {
+                        batteryData[i + prevCount] = batteryData[i];
+                    }
+
+                    // Vormonatsdaten an den Anfang kopieren (bereits die richtigen Zeilen gelesen)
+                    for (int i = 0; i < prevCount; i++) {
+                        batteryData[i] = prevBatt[i];
+                    }
+
+                    totalLines = prevCount + currentMonthLines;
+                    Serial.printf("[Graph] Added %d lines from previous month (%s)\n", prevCount, prevFilename.c_str());
+                } else {
+                    Serial.println("[Graph] Indoor buffer overflow prevented - using current month only");
                 }
 
                 free(prevBatt);
