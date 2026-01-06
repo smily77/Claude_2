@@ -1,0 +1,18 @@
+# ESP-Control .gitignore
+
+# Lokale Konfigurationsdateien (enthalten Hardware-Pins und Secrets)
+ESP_Code_Conf.h
+ESP_Code_Key.h
+
+# Arduino Build-Verzeichnisse
+build/
+*.elf
+*.bin
+*.hex
+
+# IDE-spezifische Dateien
+.vscode/
+.DS_Store
+*.swp
+*.swo
+*~
