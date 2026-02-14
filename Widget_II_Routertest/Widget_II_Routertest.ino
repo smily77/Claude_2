@@ -33,7 +33,7 @@
 // Intervall zwischen WiFi-Verbindungsversuchen in Sekunden
 // Auf 15 Minuten (900 Sekunden) eingestellt
 // Zum Testen kann man den Wert verkleinern, z.B. 60 fuer 1 Minute
-const unsigned long CONNECT_INTERVAL_SEC = 15 * 60;  // 15 Minuten
+const unsigned long CONNECT_INTERVAL_SEC = 5 * 60;  // 15 Minuten
 
 // Maximale Wartezeit fuer WiFi-Verbindung in Sekunden
 const int WIFI_CONNECT_TIMEOUT_SEC = 30;
