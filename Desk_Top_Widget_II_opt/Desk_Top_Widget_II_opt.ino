@@ -22,7 +22,7 @@ extern "C" {
 }
 
 #define NEW
-#define SCHWARZ
+//#define SCHWARZ
 #define DEBUG true
 
 // ============================================
