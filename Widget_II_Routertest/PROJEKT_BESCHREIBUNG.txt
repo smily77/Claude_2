@@ -1,0 +1,139 @@
+========================================================================
+Widget_II_Routertest - 4G Hotspot Keep-Alive Testprogramm
+========================================================================
+
+PROBLEMSTELLUNG
+===============
+Die Desktop-Anzeige (Desk_Top_Widget_II_opt) laeuft auf einem ESP8266
+und zeigt Weltzeiten sowie Forex-Kurse an. Das Geraet braucht Internet,
+das bisher ueber ein altes Handy als 2G/3G-Hotspot bereitgestellt wurde.
+
+Nach der Abschaltung von 2G/3G durch den Provider wurde auf einen
+mobilen 4G-Hotspot umgestellt. Dieser schaltet jedoch sein WLAN nach
+einer gewissen Zeit der Inaktivitaet ab, um Strom zu sparen.
+
+Da Desk_Top_Widget_II_opt nur sehr selten mit dem Internet verbindet
+(einmal beim Start und einmal taeglich um Mitternacht), erkennt der
+4G-Hotspot keine Aktivitaet und schaltet das WLAN ab.
+
+LOESUNGSIDEE
+============
+Periodisches Verbinden und Trennen mit dem WLAN des 4G-Hotspots,
+OHNE Daten herunterzuladen. Allein der WiFi-Connect/Disconnect-Zyklus
+sollte genuegen, um den Hotspot aktiv zu halten und im gratis
+Datenvolumen des Providers zu bleiben.
+
+ZWECK DIESES TESTPROGRAMMS
+===========================
+Dieses Programm testet die Loesungsidee isoliert:
+- Es verbindet sich periodisch mit dem WLAN (ssid2)
+- Es trennt sofort wieder (nach 2 Sekunden)
+- Es zeigt den Countdown bis zum naechsten Versuch an
+- Es zeigt ob die Verbindung erfolgreich war (gruen/rot)
+- Es zaehlt Erfolge und Fehlschlaege
+
+Das Ziel ist herauszufinden:
+1. Ob periodisches WiFi-Verbinden den Hotspot aktiv haelt
+2. Welche Periodizitaet (Intervall) dafuer noetig ist
+
+HARDWARE
+========
+Identisch zu Desk_Top_Widget_II_opt:
+- ESP8266 (NodeMCU oder WeMos D1 Mini)
+- Adafruit ST7735 1.8" TFT Display (160x128 Pixel)
+- LDR an A0 fuer automatische Helligkeitssteuerung
+
+Verdrahtung:
+  TFT_CS  -> GPIO 15
+  TFT_DC  -> GPIO 2
+  TFT_RST -> GPIO 12
+  LED     -> GPIO 4  (TFT Hintergrundbeleuchtung, PWM)
+  LDR     -> A0      (Helligkeitssensor)
+
+KONFIGURATION
+=============
+Im Programm Widget_II_Routertest.ino:
+- CONNECT_INTERVAL_SEC: Intervall zwischen WiFi-Verbindungsversuchen
+  Standardwert: 900 (15 Minuten)
+  Zum Testen kuerzer einstellen, z.B. 60 (1 Minute)
+- WIFI_CONNECT_TIMEOUT_SEC: Maximale Wartezeit fuer WiFi-Verbindung
+  Standardwert: 30 Sekunden
+
+WiFi-Zugangsdaten werden aus Credentials.h gelesen (ssid2, password2).
+Diese Datei muss im Arduino-Libraries-Verzeichnis vorhanden sein.
+
+DISPLAY-ANZEIGE
+===============
+- Titel: "Router Keep-Alive Test"
+- Status des letzten Verbindungsversuchs (OK/FAIL)
+- Grosser Countdown im Format MM:SS bis zum naechsten Versuch
+- Statistik: Anzahl OK, FAIL, Total
+- Aktuell verwendete SSID
+- Hintergrundfarbe: GRUEN nach Erfolg, ROT nach Fehlschlag
+
+TESTDURCHFUEHRUNG
+=================
+1. Programm auf ESP8266 flashen
+2. 4G-Hotspot einschalten
+3. Beobachten ob der Hotspot eingeschaltet bleibt
+4. Falls der Hotspot trotzdem abschaltet:
+   - CONNECT_INTERVAL_SEC verkleinern (z.B. 5*60 fuer 5 Minuten)
+   - Erneut testen
+5. Optimales Intervall finden: so gross wie moeglich,
+   aber klein genug um den Hotspot aktiv zu halten
+
+SERIELLE AUSGABE
+================
+Das Programm gibt ueber den seriellen Monitor (9600 Baud) aus:
+- Verbindungsversuche mit Ergebnis
+- IP-Adresse bei erfolgreicher Verbindung
+- Laufende Statistik
+
+UMBAU VON DESK_TOP_WIDGET_II_OPT
+=================================
+Wenn das Testprogramm erfolgreich zeigt, dass periodisches Verbinden
+den Hotspot aktiv haelt, muss Desk_Top_Widget_II_opt wie folgt
+angepasst werden:
+
+1. WIFI-MANAGEMENT AENDERN:
+   Aktuell verbindet Desk_Top_Widget_II_opt beim Start und bleibt
+   danach dauerhaft verbunden (wifi_station_set_auto_connect(true)).
+   Da das Geraet nur einmal taeglich (um Mitternacht) Daten abruft,
+   wird das WLAN dazwischen nicht aktiv genutzt.
+
+   Neues Verhalten:
+   - Nach dem initialen Setup (NTP + Forex) WiFi trennen
+   - Periodisch nur kurz verbinden und trennen (Keep-Alive)
+   - Fuer den taeglichen Update um Mitternacht: Verbinden, Daten
+     holen, wieder trennen
+
+2. NEUE KONSTANTE EINFUEGEN:
+   const unsigned long KEEPALIVE_INTERVAL_SEC = XX * 60;
+   (XX = optimaler Wert aus dem Test, z.B. 10 oder 15 Minuten)
+
+3. LOOP() ERWEITERN:
+   - Timer fuer Keep-Alive hinzufuegen
+   - Wenn Keep-Alive-Timer ablaeuft:
+     a) WiFi.begin(ssid2, password2)
+     b) Warten auf Verbindung (max. 30 Sek.)
+     c) WiFi.disconnect()
+   - Der taegliche Update um Mitternacht muss ebenfalls
+     WiFi.begin() vor dem NTP/Forex-Abruf ausfuehren
+     und danach WiFi.disconnect()
+
+4. OPTIONAL - STATUSANZEIGE:
+   Kleine Anzeige auf dem Display ob der letzte Keep-Alive
+   erfolgreich war (z.B. kleiner gruener/roter Punkt in einer Ecke)
+
+5. WiFi.mode(WIFI_STA) im Setup verwenden und
+   wifi_station_set_auto_connect(false) setzen, damit der ESP8266
+   nicht automatisch im Hintergrund verbindet
+
+6. CREDENTIALS:
+   Sicherstellen dass ssid2/password2 fuer den 4G-Hotspot konfiguriert
+   sind. Die DEBUG-Weiche (ssid1 vs ssid2) kann beibehalten werden.
+
+DATEIEN
+=======
+Widget_II_Routertest.ino  - Arduino-Hauptprogramm (Testprogramm)
+PROJEKT_BESCHREIBUNG.txt  - Diese Datei
