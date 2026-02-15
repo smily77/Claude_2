@@ -219,22 +219,21 @@ void setup() {
 
   // NTP vorbereiten (wird nur gebraucht wenn UDP nicht blockiert)
   WiFi.hostByName(timerServerDNSName, timeServer);
-  tft.print("NTP Server: ");
+  tft.print("NTP: ");
   tft.println(timeServer.toString());
   Udp.begin(localPort);
 
   int syncAttempts = 0;
-  while (currentTime == 0 && syncAttempts < 3) {
+  while (currentTime == 0 && syncAttempts < 5) {
     syncAttempts++;
-    tft.print("Attempt ");
     tft.print(syncAttempts);
-    tft.print("... ");
+    tft.print(") ");
     currentTime = syncTime();
     if (currentTime != 0) {
-      tft.println("OK");
+      tft.println(" OK!");
     } else {
-      tft.println("FAIL");
-      delay(1000);
+      tft.println(" FAIL");
+      delay(2000);
     }
   }
 
@@ -252,6 +251,7 @@ void setup() {
   tft.print(":");
   sprintf(anzeige, "%02i", minute());
   tft.println(anzeige);
+  delay(2000);
 
   // Wechselkurse holen
   clearTFTScreen();

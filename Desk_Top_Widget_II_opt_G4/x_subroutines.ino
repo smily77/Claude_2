@@ -125,28 +125,46 @@ time_t getNtpTime() {
 }
 
 // HTTP-basierte Zeitsynchronisation (Fallback wenn NTP/UDP blockiert ist)
-// Holt die Zeit aus dem "Date:" Header einer HTTPS-Antwort von Google.
+// Holt die Zeit aus dem "Date:" Header einer HTTPS-Antwort.
+// Verwendet api.frankfurter.app (gleicher Server wie Waehrungsabruf,
+// funktioniert nachweislich ueber den 4G-Hotspot).
 // Funktioniert ueber TCP Port 443, der von 4G-Providern nie blockiert wird.
 time_t getTimeHTTP() {
-  const char* host = "www.google.com";
+  const char* host = "api.frankfurter.app";
 
-  if (DEBUG) Serial.println("HTTP time: connecting to google.com...");
+  if (DEBUG) Serial.println("HTTP time: connecting to frankfurter.app...");
+  tft.print("  HTTP:");
+
+  // Alte Verbindung sauber beenden
+  clientSec.stop();
+  delay(100);
 
   clientSec.setInsecure();
+  clientSec.setTimeout(15000);  // 15 Sek. Timeout
+
   if (!clientSec.connect(host, 443)) {
     if (DEBUG) Serial.println("HTTP time: connection failed");
+    tft.print("conn fail ");
     return 0;
   }
 
-  // HEAD Request - laedt keine Daten, nur Header
-  clientSec.print("HEAD / HTTP/1.1\r\nHost: www.google.com\r\nConnection: close\r\n\r\n");
+  tft.print("ok ");
+
+  // GET /latest - gleicher Endpunkt wie Waehrungsabruf
+  clientSec.print("GET /latest HTTP/1.1\r\nHost: api.frankfurter.app\r\nConnection: close\r\n\r\n");
 
   time_t result = 0;
 
-  while (clientSec.connected()) {
+  // Header lesen und Date: suchen
+  unsigned long httpStart = millis();
+  while (clientSec.connected() && (millis() - httpStart < 10000)) {
+    if (!clientSec.available()) {
+      delay(10);
+      continue;
+    }
     String line = clientSec.readStringUntil('\n');
 
-    if (line.startsWith("Date:")) {
+    if (line.startsWith("Date:") || line.startsWith("date:")) {
       // Format: "Date: Sat, 15 Feb 2026 10:30:00 GMT"
       int commaIdx = line.indexOf(',');
       if (commaIdx < 0) break;
@@ -174,7 +192,6 @@ time_t getTimeHTTP() {
       }
 
       if (mon > 0 && y > 2020 && d > 0) {
-        // UTC-Zeit zusammenbauen mit TimeLib
         tmElements_t tm;
         tm.Year = y - 1970;
         tm.Month = mon;
@@ -184,7 +201,6 @@ time_t getTimeHTTP() {
         tm.Second = s;
 
         time_t utcTime = makeTime(tm);
-        // Lokale Zeitzone addieren
         result = utcTime + getTimezoneOffset(0, utcTime);
 
         if (DEBUG) {
@@ -196,12 +212,18 @@ time_t getTimeHTTP() {
           Serial.print("HTTP time local: ");
           Serial.println(result);
         }
+        tft.print("parsed ");
+      } else {
+        tft.print("parse err ");
       }
       break;
     }
 
-    // Ende der Header
-    if (line == "\r") break;
+    // Ende der Header ohne Date gefunden
+    if (line == "\r") {
+      tft.print("no date ");
+      break;
+    }
   }
 
   clientSec.stop();
@@ -213,11 +235,14 @@ time_t getTimeHTTP() {
 time_t syncTime() {
   // Versuch 1: NTP (schnell, praezise, aber UDP Port 123 oft blockiert bei 4G)
   if (DEBUG) Serial.println("syncTime: trying NTP...");
+  tft.print("NTP:");
   time_t t = getNtpTime();
   if (t != 0) {
     if (DEBUG) Serial.println("syncTime: NTP OK");
+    tft.print("ok ");
     return t;
   }
+  tft.print("fail ");
 
   // Versuch 2: HTTP Date Header (immer verfuegbar ueber TCP 443)
   if (DEBUG) Serial.println("syncTime: NTP failed, trying HTTP...");
