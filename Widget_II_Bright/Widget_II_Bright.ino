@@ -22,7 +22,7 @@ int lastValue = -1;
 void setup() {
   Serial.begin(9600);
   pinMode(LED_PIN, OUTPUT);
-  analogWrite(LED_PIN, 1010);  // Display-Helligkeit fix auf Maximum
+  analogWrite(LED_PIN, 128);  // Display-Helligkeit fix auf Maximum
 
   tft.initR(INITR_BLACKTAB);
   tft.setTextWrap(false);
