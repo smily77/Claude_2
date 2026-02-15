@@ -139,49 +139,19 @@ beim Umbau korrigiert werden. Ermittelt mit Widget_II_Bright:
                                            // aber hoher PWM = auch dunkel
                                            // -> im Hellen bleibt Display dunkel!
 
-UMBAU VON DESK_TOP_WIDGET_II_OPT
-=================================
-Wenn das Testprogramm erfolgreich zeigt, dass periodisches Verbinden
-den Hotspot aktiv haelt, muss Desk_Top_Widget_II_opt wie folgt
-angepasst werden:
+UMBAU VON DESK_TOP_WIDGET_II_OPT -> ERLEDIGT
+==============================================
+Der Umbau wurde in Desk_Top_Widget_II_opt_G4 umgesetzt:
 
-1. WIFI-MANAGEMENT AENDERN:
-   Aktuell verbindet Desk_Top_Widget_II_opt beim Start und bleibt
-   danach dauerhaft verbunden (wifi_station_set_auto_connect(true)).
-   Da das Geraet nur einmal taeglich (um Mitternacht) Daten abruft,
-   wird das WLAN dazwischen nicht aktiv genutzt.
+1. WiFi Keep-Alive alle 3 Minuten (nicht-blockierend via State Machine)
+2. Vereinfachte WLAN-Auswahl (ssid1 bei DEBUG, sonst ssid2)
+3. Korrekte Helligkeitssteuerung (invertierte LDR-Logik)
+4. Taegliche Aktualisierung um 17:00 (EZB-Kurse nach 16:00 aktuell)
+5. WiFi-Status: Staedtezeiten ROT bei Verbindungsfehler
+6. Wechselkurse ausgeblendet wenn Laden fehlgeschlagen
+7. WiFi nach Setup getrennt, nur fuer Keep-Alive/Update verbunden
 
-   Neues Verhalten:
-   - Nach dem initialen Setup (NTP + Forex) WiFi trennen
-   - Periodisch nur kurz verbinden und trennen (Keep-Alive)
-   - Fuer den taeglichen Update um Mitternacht: Verbinden, Daten
-     holen, wieder trennen
-
-2. NEUE KONSTANTE EINFUEGEN:
-   const unsigned long KEEPALIVE_INTERVAL_SEC = XX * 60;
-   (XX = optimaler Wert aus dem Test, z.B. 10 oder 15 Minuten)
-
-3. LOOP() ERWEITERN:
-   - Timer fuer Keep-Alive hinzufuegen
-   - Wenn Keep-Alive-Timer ablaeuft:
-     a) WiFi.begin(ssid2, password2)
-     b) Warten auf Verbindung (max. 30 Sek.)
-     c) WiFi.disconnect()
-   - Der taegliche Update um Mitternacht muss ebenfalls
-     WiFi.begin() vor dem NTP/Forex-Abruf ausfuehren
-     und danach WiFi.disconnect()
-
-4. OPTIONAL - STATUSANZEIGE:
-   Kleine Anzeige auf dem Display ob der letzte Keep-Alive
-   erfolgreich war (z.B. kleiner gruener/roter Punkt in einer Ecke)
-
-5. WiFi.mode(WIFI_STA) im Setup verwenden und
-   wifi_station_set_auto_connect(false) setzen, damit der ESP8266
-   nicht automatisch im Hintergrund verbindet
-
-6. CREDENTIALS:
-   Sicherstellen dass ssid2/password2 fuer den 4G-Hotspot konfiguriert
-   sind. Die DEBUG-Weiche (ssid1 vs ssid2) kann beibehalten werden.
+Details siehe Desk_Top_Widget_II_opt_G4/README.md
 
 DATEIEN
 =======
