@@ -29,7 +29,7 @@ void displayMainScreen() {
 
   // Farbe fuer Staedtezeiten: ROT bei WiFi-Fehler, sonst GELB
   uint16_t cityColor = lastWifiOK ? ST7735_YELLOW : ST7735_RED;
-  uint16_t timeColor = lastWifiOK ? ST7735_WHITE : ST7735_RED;
+  uint16_t timeColor = lastWifiOK ? ST7735_YELLOW : ST7735_YELLOW;
 
   // Erste Zeile: DXB, SIN, IAD
   tft.setFont();

@@ -28,7 +28,7 @@ extern "C" {
 
 #define NEW
 //#define SCHWARZ
-#define DEBUG true
+#define DEBUG false
 
 // ============================================
 // KONFIGURATION: Nur Airport-Codes aendern!
