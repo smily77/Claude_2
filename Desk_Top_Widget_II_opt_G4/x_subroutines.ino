@@ -79,85 +79,35 @@ void readBMP(double &T, double &P) {
   }
 }
 
-// NTP Paket senden
-void sendNTPpacket(IPAddress &address) {
-  memset(packetBuffer, 0, NTP_PACKET_SIZE);
-  packetBuffer[0] = 0b11100011;
-  packetBuffer[1] = 0;
-  packetBuffer[2] = 6;
-  packetBuffer[3] = 0xEC;
-  packetBuffer[12] = 49;
-  packetBuffer[13] = 0x4E;
-  packetBuffer[14] = 49;
-  packetBuffer[15] = 52;
-
-  Udp.beginPacket(address, 123);
-  Udp.write(packetBuffer, NTP_PACKET_SIZE);
-  Udp.endPacket();
-}
-
-// NTP Zeit holen (funktioniert nur wenn UDP Port 123 nicht blockiert ist)
-time_t getNtpTime() {
-  time_t tempTime;
-
-  while (Udp.parsePacket() > 0); // Alte Pakete verwerfen
-  sendNTPpacket(timeServer);
-  uint32_t beginWait = millis();
-  while (millis() - beginWait < 1500) {
-    int size = Udp.parsePacket();
-    if (size >= NTP_PACKET_SIZE) {
-      Udp.read(packetBuffer, NTP_PACKET_SIZE);
-      unsigned long secsSince1900;
-      secsSince1900 = (unsigned long)packetBuffer[40] << 24;
-      secsSince1900 |= (unsigned long)packetBuffer[41] << 16;
-      secsSince1900 |= (unsigned long)packetBuffer[42] << 8;
-      secsSince1900 |= (unsigned long)packetBuffer[43];
-
-      // Zeit fuer lokale Zeitzone berechnen
-      tempTime = secsSince1900 - 2208988800UL;
-      tempTime += getTimezoneOffset(0, tempTime);
-
-      if (DEBUG) Serial.println(tempTime);
-      return tempTime;
-    }
-  }
-  return 0;
-}
-
-// HTTP-basierte Zeitsynchronisation (Fallback wenn NTP/UDP blockiert ist)
+// Zeitsynchronisation via HTTP
 // Holt die Zeit aus dem "Date:" Header einer HTTPS-Antwort.
-// Verwendet api.frankfurter.app (gleicher Server wie Waehrungsabruf,
-// funktioniert nachweislich ueber den 4G-Hotspot).
-// Funktioniert ueber TCP Port 443, der von 4G-Providern nie blockiert wird.
+// Verwendet api.frankfurter.app (gleicher Server wie Waehrungsabruf).
+// NTP (UDP Port 123) wird von 4G-Providern blockiert, daher nur HTTP.
 time_t getTimeHTTP() {
   const char* host = "api.frankfurter.app";
 
   if (DEBUG) Serial.println("HTTP time: connecting to frankfurter.app...");
-  tft.print("  HTTP:");
 
-  // Alte Verbindung sauber beenden
   clientSec.stop();
   delay(100);
 
   clientSec.setInsecure();
-  clientSec.setTimeout(15000);  // 15 Sek. Timeout
+  clientSec.setTimeout(15000);
 
   if (!clientSec.connect(host, 443)) {
     if (DEBUG) Serial.println("HTTP time: connection failed");
-    tft.print("conn fail ");
     return 0;
   }
 
-  tft.print("ok ");
+  if (DEBUG) Serial.println("HTTP time: connected");
 
-  // GET /latest - gleicher Endpunkt wie Waehrungsabruf
   clientSec.print("GET /latest HTTP/1.1\r\nHost: api.frankfurter.app\r\nConnection: close\r\n\r\n");
 
   time_t result = 0;
 
   // Header lesen und Date: suchen
   unsigned long httpStart = millis();
-  while (clientSec.connected() && (millis() - httpStart < 10000)) {
+  while (clientSec.connected() && (millis() - httpStart < 15000)) {
     if (!clientSec.available()) {
       delay(10);
       continue;
@@ -169,7 +119,6 @@ time_t getTimeHTTP() {
       int commaIdx = line.indexOf(',');
       if (commaIdx < 0) break;
 
-      // Nach dem ", " kommt: "15 Feb 2026 10:30:00 GMT"
       String datePart = line.substring(commaIdx + 2);
       datePart.trim();
 
@@ -180,7 +129,6 @@ time_t getTimeHTTP() {
       int mi = datePart.substring(15, 17).toInt();
       int s  = datePart.substring(18, 20).toInt();
 
-      // Monatsname -> Nummer
       const char* months[] = {"Jan","Feb","Mar","Apr","May","Jun",
                               "Jul","Aug","Sep","Oct","Nov","Dec"};
       int mon = 0;
@@ -204,55 +152,21 @@ time_t getTimeHTTP() {
         result = utcTime + getTimezoneOffset(0, utcTime);
 
         if (DEBUG) {
-          Serial.print("HTTP time UTC: ");
+          Serial.print("HTTP time: ");
           Serial.print(d); Serial.print("."); Serial.print(mon);
           Serial.print("."); Serial.print(y); Serial.print(" ");
           Serial.print(h); Serial.print(":"); Serial.print(mi);
           Serial.print(":"); Serial.println(s);
-          Serial.print("HTTP time local: ");
-          Serial.println(result);
         }
-        tft.print("parsed ");
-      } else {
-        tft.print("parse err ");
       }
       break;
     }
 
-    // Ende der Header ohne Date gefunden
-    if (line == "\r") {
-      tft.print("no date ");
-      break;
-    }
+    if (line == "\r") break;
   }
 
   clientSec.stop();
   return result;
-}
-
-// Zeitsynchronisation: Versucht NTP, bei Fehler Fallback auf HTTP
-// Gibt lokale Zeit zurueck oder 0 bei Fehler
-time_t syncTime() {
-  // Versuch 1: NTP (schnell, praezise, aber UDP Port 123 oft blockiert bei 4G)
-  if (DEBUG) Serial.println("syncTime: trying NTP...");
-  tft.print("NTP:");
-  time_t t = getNtpTime();
-  if (t != 0) {
-    if (DEBUG) Serial.println("syncTime: NTP OK");
-    tft.print("ok ");
-    return t;
-  }
-  tft.print("fail ");
-
-  // Versuch 2: HTTP Date Header (immer verfuegbar ueber TCP 443)
-  if (DEBUG) Serial.println("syncTime: NTP failed, trying HTTP...");
-  t = getTimeHTTP();
-  if (t != 0) {
-    if (DEBUG) Serial.println("syncTime: HTTP OK");
-  } else {
-    if (DEBUG) Serial.println("syncTime: HTTP also failed!");
-  }
-  return t;
 }
 
 // Berechnet ob DST aktiv ist fuer EU-Zeitzonen

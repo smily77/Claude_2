@@ -11,7 +11,6 @@
 #include <TimeLib.h>
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
-#include <WiFiUdp.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
@@ -70,14 +69,6 @@ WiFiClientSecure clientSec;
 // Vereinfachte WLAN-Auswahl: ssid1 bei DEBUG, sonst ssid2
 const char* activeSSID = DEBUG ? ssid1 : ssid2;
 const char* activePassword = DEBUG ? password1 : password2;
-
-const char* timerServerDNSName = "0.ch.pool.ntp.org";
-IPAddress timeServer;
-
-WiFiUDP Udp;
-const unsigned int localPort = 8888;
-const int NTP_PACKET_SIZE = 48;
-byte packetBuffer[NTP_PACKET_SIZE];
 
 #define TFT_PIN_CS   15
 #define TFT_PIN_DC   2
@@ -213,26 +204,20 @@ void setup() {
   tft.println("Loading timezones...");
   initializeTimezones();
 
-  // Zeit synchronisieren (NTP mit HTTP-Fallback)
+  // Zeit synchronisieren via HTTP (NTP/UDP wird von 4G-Providern blockiert)
   clearTFTScreen();
-  tft.println("Syncing time...");
-
-  // NTP vorbereiten (wird nur gebraucht wenn UDP nicht blockiert)
-  WiFi.hostByName(timerServerDNSName, timeServer);
-  tft.print("NTP: ");
-  tft.println(timeServer.toString());
-  Udp.begin(localPort);
+  tft.println("Syncing time (HTTP)...");
 
   int syncAttempts = 0;
   while (currentTime == 0 && syncAttempts < 5) {
     syncAttempts++;
     tft.print(syncAttempts);
     tft.print(") ");
-    currentTime = syncTime();
+    currentTime = getTimeHTTP();
     if (currentTime != 0) {
-      tft.println(" OK!");
+      tft.println("OK!");
     } else {
-      tft.println(" FAIL");
+      tft.println("FAIL");
       delay(2000);
     }
   }
@@ -403,8 +388,8 @@ void doDailyUpdate() {
     lastWifiOK = true;
     if (DEBUG) Serial.println("Daily: WiFi connected");
 
-    // Zeit synchronisieren (NTP mit HTTP-Fallback)
-    time_t newTime = syncTime();
+    // Zeit synchronisieren via HTTP
+    time_t newTime = getTimeHTTP();
     if (newTime != 0) {
       setTime(newTime);
       if (DEBUG) Serial.println("Daily: Time synced");
