@@ -150,6 +150,9 @@ Der Umbau wurde in Desk_Top_Widget_II_opt_G4 umgesetzt:
 5. WiFi-Status: Staedtezeiten ROT bei Verbindungsfehler
 6. Wechselkurse ausgeblendet wenn Laden fehlgeschlagen
 7. WiFi nach Setup getrennt, nur fuer Keep-Alive/Update verbunden
+8. HTTP-Fallback fuer Zeitsynchronisation (NTP/UDP Port 123 wird
+   von vielen 4G-Providern blockiert). Loesung: syncTime() versucht
+   zuerst NTP, dann HTTP Date-Header von google.com (HTTPS/TCP 443)
 
 Details siehe Desk_Top_Widget_II_opt_G4/README.md
 

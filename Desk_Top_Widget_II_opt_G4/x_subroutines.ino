@@ -96,7 +96,7 @@ void sendNTPpacket(IPAddress &address) {
   Udp.endPacket();
 }
 
-// NTP Zeit holen
+// NTP Zeit holen (funktioniert nur wenn UDP Port 123 nicht blockiert ist)
 time_t getNtpTime() {
   time_t tempTime;
 
@@ -122,6 +122,112 @@ time_t getNtpTime() {
     }
   }
   return 0;
+}
+
+// HTTP-basierte Zeitsynchronisation (Fallback wenn NTP/UDP blockiert ist)
+// Holt die Zeit aus dem "Date:" Header einer HTTPS-Antwort von Google.
+// Funktioniert ueber TCP Port 443, der von 4G-Providern nie blockiert wird.
+time_t getTimeHTTP() {
+  const char* host = "www.google.com";
+
+  if (DEBUG) Serial.println("HTTP time: connecting to google.com...");
+
+  clientSec.setInsecure();
+  if (!clientSec.connect(host, 443)) {
+    if (DEBUG) Serial.println("HTTP time: connection failed");
+    return 0;
+  }
+
+  // HEAD Request - laedt keine Daten, nur Header
+  clientSec.print("HEAD / HTTP/1.1\r\nHost: www.google.com\r\nConnection: close\r\n\r\n");
+
+  time_t result = 0;
+
+  while (clientSec.connected()) {
+    String line = clientSec.readStringUntil('\n');
+
+    if (line.startsWith("Date:")) {
+      // Format: "Date: Sat, 15 Feb 2026 10:30:00 GMT"
+      int commaIdx = line.indexOf(',');
+      if (commaIdx < 0) break;
+
+      // Nach dem ", " kommt: "15 Feb 2026 10:30:00 GMT"
+      String datePart = line.substring(commaIdx + 2);
+      datePart.trim();
+
+      int d  = datePart.substring(0, 2).toInt();
+      String monStr = datePart.substring(3, 6);
+      int y  = datePart.substring(7, 11).toInt();
+      int h  = datePart.substring(12, 14).toInt();
+      int mi = datePart.substring(15, 17).toInt();
+      int s  = datePart.substring(18, 20).toInt();
+
+      // Monatsname -> Nummer
+      const char* months[] = {"Jan","Feb","Mar","Apr","May","Jun",
+                              "Jul","Aug","Sep","Oct","Nov","Dec"};
+      int mon = 0;
+      for (int i = 0; i < 12; i++) {
+        if (monStr.equalsIgnoreCase(months[i])) {
+          mon = i + 1;
+          break;
+        }
+      }
+
+      if (mon > 0 && y > 2020 && d > 0) {
+        // UTC-Zeit zusammenbauen mit TimeLib
+        tmElements_t tm;
+        tm.Year = y - 1970;
+        tm.Month = mon;
+        tm.Day = d;
+        tm.Hour = h;
+        tm.Minute = mi;
+        tm.Second = s;
+
+        time_t utcTime = makeTime(tm);
+        // Lokale Zeitzone addieren
+        result = utcTime + getTimezoneOffset(0, utcTime);
+
+        if (DEBUG) {
+          Serial.print("HTTP time UTC: ");
+          Serial.print(d); Serial.print("."); Serial.print(mon);
+          Serial.print("."); Serial.print(y); Serial.print(" ");
+          Serial.print(h); Serial.print(":"); Serial.print(mi);
+          Serial.print(":"); Serial.println(s);
+          Serial.print("HTTP time local: ");
+          Serial.println(result);
+        }
+      }
+      break;
+    }
+
+    // Ende der Header
+    if (line == "\r") break;
+  }
+
+  clientSec.stop();
+  return result;
+}
+
+// Zeitsynchronisation: Versucht NTP, bei Fehler Fallback auf HTTP
+// Gibt lokale Zeit zurueck oder 0 bei Fehler
+time_t syncTime() {
+  // Versuch 1: NTP (schnell, praezise, aber UDP Port 123 oft blockiert bei 4G)
+  if (DEBUG) Serial.println("syncTime: trying NTP...");
+  time_t t = getNtpTime();
+  if (t != 0) {
+    if (DEBUG) Serial.println("syncTime: NTP OK");
+    return t;
+  }
+
+  // Versuch 2: HTTP Date Header (immer verfuegbar ueber TCP 443)
+  if (DEBUG) Serial.println("syncTime: NTP failed, trying HTTP...");
+  t = getTimeHTTP();
+  if (t != 0) {
+    if (DEBUG) Serial.println("syncTime: HTTP OK");
+  } else {
+    if (DEBUG) Serial.println("syncTime: HTTP also failed!");
+  }
+  return t;
 }
 
 // Berechnet ob DST aktiv ist fuer EU-Zeitzonen

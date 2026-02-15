@@ -213,23 +213,45 @@ void setup() {
   tft.println("Loading timezones...");
   initializeTimezones();
 
-  // NTP Zeit holen
+  // Zeit synchronisieren (NTP mit HTTP-Fallback)
   clearTFTScreen();
-  while (currentTime == 0) {
-    tft.print("Resolving NTP Server IP ");
-    WiFi.hostByName(timerServerDNSName, timeServer);
-    tft.println(timeServer.toString());
+  tft.println("Syncing time...");
 
-    tft.print("Starting UDP... ");
-    Udp.begin(localPort);
-    tft.print("local port: ");
-    tft.println(Udp.localPort());
+  // NTP vorbereiten (wird nur gebraucht wenn UDP nicht blockiert)
+  WiFi.hostByName(timerServerDNSName, timeServer);
+  tft.print("NTP Server: ");
+  tft.println(timeServer.toString());
+  Udp.begin(localPort);
 
-    tft.println("Waiting for NTP sync");
-    currentTime = getNtpTime();
-    tft.println(currentTime);
-    setTime(currentTime);
+  int syncAttempts = 0;
+  while (currentTime == 0 && syncAttempts < 3) {
+    syncAttempts++;
+    tft.print("Attempt ");
+    tft.print(syncAttempts);
+    tft.print("... ");
+    currentTime = syncTime();
+    if (currentTime != 0) {
+      tft.println("OK");
+    } else {
+      tft.println("FAIL");
+      delay(1000);
+    }
   }
+
+  if (currentTime == 0) {
+    tft.println();
+    tft.println("Time sync failed!");
+    tft.println("Restarting in 10s...");
+    delay(10000);
+    ESP.reset();
+  }
+
+  setTime(currentTime);
+  tft.print("Time: ");
+  tft.print(hour());
+  tft.print(":");
+  sprintf(anzeige, "%02i", minute());
+  tft.println(anzeige);
 
   // Wechselkurse holen
   clearTFTScreen();
@@ -381,11 +403,11 @@ void doDailyUpdate() {
     lastWifiOK = true;
     if (DEBUG) Serial.println("Daily: WiFi connected");
 
-    // NTP Zeit synchronisieren
-    time_t newTime = getNtpTime();
+    // Zeit synchronisieren (NTP mit HTTP-Fallback)
+    time_t newTime = syncTime();
     if (newTime != 0) {
       setTime(newTime);
-      if (DEBUG) Serial.println("Daily: NTP synced");
+      if (DEBUG) Serial.println("Daily: Time synced");
     }
 
     // Wechselkurse aktualisieren

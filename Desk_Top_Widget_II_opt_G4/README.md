@@ -40,6 +40,18 @@ Die LDR-Logik ist invertiert (im Original falsch implementiert):
 - Verbindung nur fuer Keep-Alive (3 Min.) und taegliches Update (17:00)
 - Minimaler Datenverbrauch (Keep-Alive uebertraegt keine Daten)
 
+### 8. Zeitsynchronisation mit HTTP-Fallback (NTP-Problem bei 4G)
+Viele 4G-Provider blockieren UDP Port 123 (NTP) als Anti-DDoS-Massnahme.
+DNS (UDP 53) und HTTPS (TCP 443) funktionieren, aber NTP nicht.
+
+Loesung: `syncTime()` versucht zuerst NTP, bei Fehler Fallback auf HTTP:
+- **NTP** (UDP 123): Schnell und praezise, funktioniert im Heim-WLAN
+- **HTTP** (TCP 443): Liest den `Date:`-Header aus einer HTTPS-Antwort
+  von google.com (HEAD-Request, keine Daten, nur Header)
+
+Dies betrifft sowohl die initiale Zeitsynchronisation als auch das
+taegliche Update um 17:00.
+
 ## Konfiguration
 
 ### WiFi
@@ -87,5 +99,5 @@ LDR     = A0      (Helligkeitssensor)
 | Desk_Top_Widget_II_opt_G4.ino | Hauptprogramm, Setup, Loop, Keep-Alive |
 | x_printsubs.ino | Display-Funktionen |
 | X_InternetInfo.ino | Wechselkurs-Abruf |
-| x_subroutines.ino | Timezone, NTP, DST |
+| x_subroutines.ino | Timezone, NTP, HTTP-Zeit-Fallback, DST |
 | AirportDatabase.h | Airport-Datenbank (PROGMEM) |
