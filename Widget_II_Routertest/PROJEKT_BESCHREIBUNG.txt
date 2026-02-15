@@ -89,6 +89,56 @@ Das Programm gibt ueber den seriellen Monitor (9600 Baud) aus:
 - IP-Adresse bei erfolgreicher Verbindung
 - Laufende Statistik
 
+TESTERGEBNIS KEEP-ALIVE
+=======================
+Mit einem Intervall von 5 Minuten bleibt der 4G-Hotspot zuverlaessig
+eingeschaltet. CONNECT_INTERVAL_SEC wurde auf 5*60 (300 Sek.) gesetzt.
+
+HELLIGKEITSSTEUERUNG (KORREKT)
+==============================
+Die Helligkeitssteuerung in Desk_Top_Widget_II_opt ist FALSCH und muss
+beim Umbau korrigiert werden. Ermittelt mit Widget_II_Bright:
+
+  ACHTUNG: Die Logik ist INVERTIERT gegenueber dem was man erwarten wuerde!
+
+  LDR an A0:
+    A0 <= 400   -> es ist HELL (viel Licht auf dem LDR)
+    A0 >= 1023  -> es ist DUNKEL (kein Licht auf dem LDR)
+
+  analogWrite(LED_PIN, ...):
+    PWM = 0     -> Display am HELLSTEN (volle Hintergrundbeleuchtung)
+    PWM = 253   -> Display am DUNKELSTEN (gerade noch sichtbar)
+    PWM = 254   -> Display praktisch AUS
+
+  Korrekte Zuordnung:
+    Hell  (A0 <= 400)  -> PWM = 0   (Display hell, da Umgebung hell)
+    Dunkel(A0 >= 1023) -> PWM = 253 (Display dunkel, da Umgebung dunkel)
+    Dazwischen         -> linear gemappt
+
+  Code fuer Desk_Top_Widget_II_opt:
+    #define LDR_HELL   400
+    #define LDR_DUNKEL 1023
+    #define PWM_HELL   0
+    #define PWM_DUNKEL 253
+
+    int val = analogRead(A0);
+    int pwm;
+    if (val <= LDR_HELL) {
+      pwm = PWM_HELL;
+    } else if (val >= LDR_DUNKEL) {
+      pwm = PWM_DUNKEL;
+    } else {
+      pwm = map(val, LDR_HELL, LDR_DUNKEL, PWM_HELL, PWM_DUNKEL);
+    }
+    analogWrite(LED_PIN, pwm);
+
+  FEHLER im originalen Desk_Top_Widget_II_opt:
+    helligkeit = analogRead(A0);          // 1024=dunkel, klein=hell
+    if (helligkeit > 1010) helligkeit = 1010;
+    analogWrite(ledPin, helligkeit);       // FALSCH: hoher A0 = dunkel,
+                                           // aber hoher PWM = auch dunkel
+                                           // -> im Hellen bleibt Display dunkel!
+
 UMBAU VON DESK_TOP_WIDGET_II_OPT
 =================================
 Wenn das Testprogramm erfolgreich zeigt, dass periodisches Verbinden
