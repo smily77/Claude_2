@@ -89,11 +89,11 @@ time_t getTimeHTTP() {
   if (DEBUG) Serial.println("HTTP time: connecting to frankfurter.app...");
 
   clientSec.stop();
-  delay(100);
+  delay(200);
 
   clientSec.setInsecure();
-  clientSec.setTimeout(15000);
 
+  // TLS-Handshake ueber 4G kann langsam sein
   if (!clientSec.connect(host, 443)) {
     if (DEBUG) Serial.println("HTTP time: connection failed");
     return 0;
@@ -101,15 +101,18 @@ time_t getTimeHTTP() {
 
   if (DEBUG) Serial.println("HTTP time: connected");
 
-  clientSec.print("GET /latest HTTP/1.1\r\nHost: api.frankfurter.app\r\nConnection: close\r\n\r\n");
+  clientSec.print(String("GET ") + "/latest" + " HTTP/1.1\r\n" +
+                  "Host: " + host + "\r\n" +
+                  "User-Agent: ESP8266Widget\r\n" +
+                  "Connection: close\r\n\r\n");
 
   time_t result = 0;
 
-  // Header lesen und Date: suchen
+  // Warte auf Antwort
   unsigned long httpStart = millis();
   while (clientSec.connected() && (millis() - httpStart < 15000)) {
     if (!clientSec.available()) {
-      delay(10);
+      delay(50);
       continue;
     }
     String line = clientSec.readStringUntil('\n');

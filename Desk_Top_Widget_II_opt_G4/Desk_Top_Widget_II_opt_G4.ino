@@ -204,33 +204,62 @@ void setup() {
   tft.println("Loading timezones...");
   initializeTimezones();
 
-  // Zeit synchronisieren via HTTP (NTP/UDP wird von 4G-Providern blockiert)
+  // Warte bis 4G-Internet bereit ist
+  // Nach WiFi-Assoziation braucht das 4G-Routing noch Zeit
   clearTFTScreen();
-  tft.println("Syncing time (HTTP)...");
+  tft.println("Waiting for 4G network...");
+  tft.println();
 
+  // DNS-Test als Indikator ob Internet bereit ist
+  IPAddress httpServer;
+  int dnsAttempts = 0;
+  boolean dnsOK = false;
+  while (!dnsOK && dnsAttempts < 10) {
+    dnsAttempts++;
+    tft.print("DNS ");
+    tft.print(dnsAttempts);
+    tft.print(": ");
+    if (WiFi.hostByName("api.frankfurter.app", httpServer)) {
+      tft.println(httpServer.toString());
+      dnsOK = true;
+    } else {
+      tft.println("wait...");
+      delay(3000);
+    }
+  }
+
+  if (!dnsOK) {
+    tft.println("No internet!");
+    tft.println("Restarting in 10s...");
+    delay(10000);
+    ESP.reset();
+  }
+
+  // Kurz warten nach DNS-Erfolg
+  delay(1000);
+
+  // Zeit synchronisieren via HTTP
+  tft.println();
+  tft.print("Time sync... ");
   int syncAttempts = 0;
   while (currentTime == 0 && syncAttempts < 5) {
     syncAttempts++;
-    tft.print(syncAttempts);
-    tft.print(") ");
     currentTime = getTimeHTTP();
-    if (currentTime != 0) {
-      tft.println("OK!");
-    } else {
-      tft.println("FAIL");
-      delay(2000);
+    if (currentTime == 0) {
+      tft.print(".");
+      delay(3000);
     }
   }
 
   if (currentTime == 0) {
-    tft.println();
-    tft.println("Time sync failed!");
+    tft.println("FAIL");
     tft.println("Restarting in 10s...");
     delay(10000);
     ESP.reset();
   }
 
   setTime(currentTime);
+  tft.println("OK!");
   tft.print("Time: ");
   tft.print(hour());
   tft.print(":");
@@ -239,9 +268,9 @@ void setup() {
   delay(2000);
 
   // Wechselkurse holen
-  clearTFTScreen();
-  tft.println("Fetching currencies...");
+  tft.print("Currencies... ");
   currenciesValid = catchCurrencies();
+  tft.println(currenciesValid ? "OK" : "FAIL");
 
   // WiFi trennen - ab jetzt nur noch Keep-Alive
   WiFi.disconnect();
