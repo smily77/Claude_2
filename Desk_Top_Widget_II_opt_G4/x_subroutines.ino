@@ -79,10 +79,55 @@ void readBMP(double &T, double &P) {
   }
 }
 
-// Zeitsynchronisation via HTTP
+// NTP Paket senden
+void sendNTPpacket(IPAddress &address) {
+  memset(packetBuffer, 0, NTP_PACKET_SIZE);
+  packetBuffer[0] = 0b11100011;
+  packetBuffer[1] = 0;
+  packetBuffer[2] = 6;
+  packetBuffer[3] = 0xEC;
+  packetBuffer[12] = 49;
+  packetBuffer[13] = 0x4E;
+  packetBuffer[14] = 49;
+  packetBuffer[15] = 52;
+
+  Udp.beginPacket(address, 123);
+  Udp.write(packetBuffer, NTP_PACKET_SIZE);
+  Udp.endPacket();
+}
+
+// NTP Zeit holen
+time_t getNtpTime() {
+  while (Udp.parsePacket() > 0); // Alte Pakete verwerfen
+  sendNTPpacket(ntpServerIP);
+  uint32_t beginWait = millis();
+  while (millis() - beginWait < 2500) {
+    int size = Udp.parsePacket();
+    if (size >= NTP_PACKET_SIZE) {
+      Udp.read(packetBuffer, NTP_PACKET_SIZE);
+      unsigned long secsSince1900;
+      secsSince1900 = (unsigned long)packetBuffer[40] << 24;
+      secsSince1900 |= (unsigned long)packetBuffer[41] << 16;
+      secsSince1900 |= (unsigned long)packetBuffer[42] << 8;
+      secsSince1900 |= (unsigned long)packetBuffer[43];
+
+      time_t tempTime = secsSince1900 - 2208988800UL;
+      tempTime += getTimezoneOffset(0, tempTime);
+
+      if (DEBUG) {
+        Serial.print("NTP time: ");
+        Serial.println(tempTime);
+      }
+      return tempTime;
+    }
+  }
+  if (DEBUG) Serial.println("NTP: no response");
+  return 0;
+}
+
+// HTTP-Fallback Zeitsynchronisation
 // Holt die Zeit aus dem "Date:" Header einer HTTPS-Antwort.
 // Verwendet api.frankfurter.app (gleicher Server wie Waehrungsabruf).
-// NTP (UDP Port 123) wird von 4G-Providern blockiert, daher nur HTTP.
 time_t getTimeHTTP() {
   const char* host = "api.frankfurter.app";
 

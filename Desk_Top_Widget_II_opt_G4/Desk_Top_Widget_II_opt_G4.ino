@@ -11,6 +11,7 @@
 #include <TimeLib.h>
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
+#include <WiFiUdp.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
@@ -64,7 +65,15 @@ char status;
 double T, P;
 
 WiFiClientSecure clientSec;
+WiFiUDP Udp;
 #include <Credentials.h>
+
+// NTP Konfiguration
+const char* ntpServerName = "0.ch.pool.ntp.org";
+IPAddress ntpServerIP;
+const unsigned int localPort = 8888;
+const int NTP_PACKET_SIZE = 48;
+byte packetBuffer[NTP_PACKET_SIZE];
 
 // Vereinfachte WLAN-Auswahl: ssid1 bei DEBUG, sonst ssid2
 const char* activeSSID = DEBUG ? ssid1 : ssid2;
@@ -204,62 +213,79 @@ void setup() {
   tft.println("Loading timezones...");
   initializeTimezones();
 
-  // Warte bis 4G-Internet bereit ist
-  // Nach WiFi-Assoziation braucht das 4G-Routing noch Zeit
+  // Warte bis Internet bereit ist (4G braucht nach WiFi-Connect etwas)
   clearTFTScreen();
-  tft.println("Waiting for 4G network...");
+  tft.println("Checking network...");
   tft.println();
 
-  // DNS-Test als Indikator ob Internet bereit ist
-  IPAddress httpServer;
+  // DNS-Test: NTP-Server aufloesen
+  tft.print("NTP DNS: ");
   int dnsAttempts = 0;
   boolean dnsOK = false;
   while (!dnsOK && dnsAttempts < 10) {
     dnsAttempts++;
-    tft.print("DNS ");
-    tft.print(dnsAttempts);
-    tft.print(": ");
-    if (WiFi.hostByName("api.frankfurter.app", httpServer)) {
-      tft.println(httpServer.toString());
+    if (WiFi.hostByName(ntpServerName, ntpServerIP)) {
+      tft.println(ntpServerIP.toString());
       dnsOK = true;
     } else {
-      tft.println("wait...");
+      if (dnsAttempts > 1) tft.print(".");
       delay(3000);
     }
   }
 
   if (!dnsOK) {
+    tft.println("FAIL");
     tft.println("No internet!");
     tft.println("Restarting in 10s...");
     delay(10000);
     ESP.reset();
   }
 
-  // Kurz warten nach DNS-Erfolg
-  delay(1000);
+  // --- NTP versuchen (primaer) ---
+  tft.print("NTP sync: ");
+  Udp.begin(localPort);
 
-  // Zeit synchronisieren via HTTP
-  tft.println();
-  tft.print("Time sync... ");
-  int syncAttempts = 0;
-  while (currentTime == 0 && syncAttempts < 5) {
-    syncAttempts++;
-    currentTime = getTimeHTTP();
+  int ntpAttempts = 0;
+  while (currentTime == 0 && ntpAttempts < 4) {
+    ntpAttempts++;
+    currentTime = getNtpTime();
     if (currentTime == 0) {
       tft.print(".");
-      delay(3000);
+      delay(1000);
     }
   }
 
-  if (currentTime == 0) {
+  Udp.stop();
+
+  if (currentTime != 0) {
+    tft.println("OK!");
+  } else {
     tft.println("FAIL");
-    tft.println("Restarting in 10s...");
-    delay(10000);
-    ESP.reset();
+
+    // --- HTTP Fallback ---
+    tft.print("HTTP sync: ");
+    int httpAttempts = 0;
+    while (currentTime == 0 && httpAttempts < 4) {
+      httpAttempts++;
+      currentTime = getTimeHTTP();
+      if (currentTime == 0) {
+        tft.print(".");
+        delay(3000);
+      }
+    }
+
+    if (currentTime != 0) {
+      tft.println("OK!");
+    } else {
+      tft.println("FAIL");
+      tft.println("Time sync failed!");
+      tft.println("Restarting in 10s...");
+      delay(10000);
+      ESP.reset();
+    }
   }
 
   setTime(currentTime);
-  tft.println("OK!");
   tft.print("Time: ");
   tft.print(hour());
   tft.print(":");
@@ -268,9 +294,11 @@ void setup() {
   delay(2000);
 
   // Wechselkurse holen
-  tft.print("Currencies... ");
+  clearTFTScreen();
+  tft.print("Currencies: ");
   currenciesValid = catchCurrencies();
   tft.println(currenciesValid ? "OK" : "FAIL");
+  delay(1000);
 
   // WiFi trennen - ab jetzt nur noch Keep-Alive
   WiFi.disconnect();
@@ -417,8 +445,27 @@ void doDailyUpdate() {
     lastWifiOK = true;
     if (DEBUG) Serial.println("Daily: WiFi connected");
 
-    // Zeit synchronisieren via HTTP
-    time_t newTime = getTimeHTTP();
+    // Zeit synchronisieren: NTP zuerst, dann HTTP Fallback
+    time_t newTime = 0;
+
+    // NTP versuchen
+    WiFi.hostByName(ntpServerName, ntpServerIP);
+    Udp.begin(localPort);
+    for (int i = 0; i < 3 && newTime == 0; i++) {
+      newTime = getNtpTime();
+      if (newTime == 0) delay(1000);
+    }
+    Udp.stop();
+
+    // HTTP Fallback
+    if (newTime == 0) {
+      if (DEBUG) Serial.println("Daily: NTP failed, trying HTTP...");
+      for (int i = 0; i < 3 && newTime == 0; i++) {
+        newTime = getTimeHTTP();
+        if (newTime == 0) delay(2000);
+      }
+    }
+
     if (newTime != 0) {
       setTime(newTime);
       if (DEBUG) Serial.println("Daily: Time synced");
