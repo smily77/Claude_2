@@ -1,0 +1,162 @@
+========================================================================
+Widget_II_Routertest - 4G Hotspot Keep-Alive Testprogramm
+========================================================================
+
+PROBLEMSTELLUNG
+===============
+Die Desktop-Anzeige (Desk_Top_Widget_II_opt) laeuft auf einem ESP8266
+und zeigt Weltzeiten sowie Forex-Kurse an. Das Geraet braucht Internet,
+das bisher ueber ein altes Handy als 2G/3G-Hotspot bereitgestellt wurde.
+
+Nach der Abschaltung von 2G/3G durch den Provider wurde auf einen
+mobilen 4G-Hotspot umgestellt. Dieser schaltet jedoch sein WLAN nach
+einer gewissen Zeit der Inaktivitaet ab, um Strom zu sparen.
+
+Da Desk_Top_Widget_II_opt nur sehr selten mit dem Internet verbindet
+(einmal beim Start und einmal taeglich um Mitternacht), erkennt der
+4G-Hotspot keine Aktivitaet und schaltet das WLAN ab.
+
+LOESUNGSIDEE
+============
+Periodisches Verbinden und Trennen mit dem WLAN des 4G-Hotspots,
+OHNE Daten herunterzuladen. Allein der WiFi-Connect/Disconnect-Zyklus
+sollte genuegen, um den Hotspot aktiv zu halten und im gratis
+Datenvolumen des Providers zu bleiben.
+
+ZWECK DIESES TESTPROGRAMMS
+===========================
+Dieses Programm testet die Loesungsidee isoliert:
+- Es verbindet sich periodisch mit dem WLAN (ssid2)
+- Es trennt sofort wieder (nach 2 Sekunden)
+- Es zeigt den Countdown bis zum naechsten Versuch an
+- Es zeigt ob die Verbindung erfolgreich war (gruen/rot)
+- Es zaehlt Erfolge und Fehlschlaege
+
+Das Ziel ist herauszufinden:
+1. Ob periodisches WiFi-Verbinden den Hotspot aktiv haelt
+2. Welche Periodizitaet (Intervall) dafuer noetig ist
+
+HARDWARE
+========
+Identisch zu Desk_Top_Widget_II_opt:
+- ESP8266 (NodeMCU oder WeMos D1 Mini)
+- Adafruit ST7735 1.8" TFT Display (160x128 Pixel)
+- LDR an A0 fuer automatische Helligkeitssteuerung
+
+Verdrahtung:
+  TFT_CS  -> GPIO 15
+  TFT_DC  -> GPIO 2
+  TFT_RST -> GPIO 12
+  LED     -> GPIO 4  (TFT Hintergrundbeleuchtung, PWM)
+  LDR     -> A0      (Helligkeitssensor)
+
+KONFIGURATION
+=============
+Im Programm Widget_II_Routertest.ino:
+- CONNECT_INTERVAL_SEC: Intervall zwischen WiFi-Verbindungsversuchen
+  Standardwert: 900 (15 Minuten)
+  Zum Testen kuerzer einstellen, z.B. 60 (1 Minute)
+- WIFI_CONNECT_TIMEOUT_SEC: Maximale Wartezeit fuer WiFi-Verbindung
+  Standardwert: 30 Sekunden
+
+WiFi-Zugangsdaten werden aus Credentials.h gelesen (ssid2, password2).
+Diese Datei muss im Arduino-Libraries-Verzeichnis vorhanden sein.
+
+DISPLAY-ANZEIGE
+===============
+- Titel: "Router Keep-Alive Test"
+- Status des letzten Verbindungsversuchs (OK/FAIL)
+- Grosser Countdown im Format MM:SS bis zum naechsten Versuch
+- Statistik: Anzahl OK, FAIL, Total
+- Aktuell verwendete SSID
+- Hintergrundfarbe: GRUEN nach Erfolg, ROT nach Fehlschlag
+
+TESTDURCHFUEHRUNG
+=================
+1. Programm auf ESP8266 flashen
+2. 4G-Hotspot einschalten
+3. Beobachten ob der Hotspot eingeschaltet bleibt
+4. Falls der Hotspot trotzdem abschaltet:
+   - CONNECT_INTERVAL_SEC verkleinern (z.B. 5*60 fuer 5 Minuten)
+   - Erneut testen
+5. Optimales Intervall finden: so gross wie moeglich,
+   aber klein genug um den Hotspot aktiv zu halten
+
+SERIELLE AUSGABE
+================
+Das Programm gibt ueber den seriellen Monitor (9600 Baud) aus:
+- Verbindungsversuche mit Ergebnis
+- IP-Adresse bei erfolgreicher Verbindung
+- Laufende Statistik
+
+TESTERGEBNIS KEEP-ALIVE
+=======================
+Mit einem Intervall von 5 Minuten bleibt der 4G-Hotspot zuverlaessig
+eingeschaltet. CONNECT_INTERVAL_SEC wurde auf 5*60 (300 Sek.) gesetzt.
+
+HELLIGKEITSSTEUERUNG (KORREKT)
+==============================
+Die Helligkeitssteuerung in Desk_Top_Widget_II_opt ist FALSCH und muss
+beim Umbau korrigiert werden. Ermittelt mit Widget_II_Bright:
+
+  ACHTUNG: Die Logik ist INVERTIERT gegenueber dem was man erwarten wuerde!
+
+  LDR an A0:
+    A0 <= 400   -> es ist HELL (viel Licht auf dem LDR)
+    A0 >= 1023  -> es ist DUNKEL (kein Licht auf dem LDR)
+
+  analogWrite(LED_PIN, ...):
+    PWM = 0     -> Display am HELLSTEN (volle Hintergrundbeleuchtung)
+    PWM = 253   -> Display am DUNKELSTEN (gerade noch sichtbar)
+    PWM = 254   -> Display praktisch AUS
+
+  Korrekte Zuordnung:
+    Hell  (A0 <= 400)  -> PWM = 0   (Display hell, da Umgebung hell)
+    Dunkel(A0 >= 1023) -> PWM = 253 (Display dunkel, da Umgebung dunkel)
+    Dazwischen         -> linear gemappt
+
+  Code fuer Desk_Top_Widget_II_opt:
+    #define LDR_HELL   400
+    #define LDR_DUNKEL 1023
+    #define PWM_HELL   0
+    #define PWM_DUNKEL 253
+
+    int val = analogRead(A0);
+    int pwm;
+    if (val <= LDR_HELL) {
+      pwm = PWM_HELL;
+    } else if (val >= LDR_DUNKEL) {
+      pwm = PWM_DUNKEL;
+    } else {
+      pwm = map(val, LDR_HELL, LDR_DUNKEL, PWM_HELL, PWM_DUNKEL);
+    }
+    analogWrite(LED_PIN, pwm);
+
+  FEHLER im originalen Desk_Top_Widget_II_opt:
+    helligkeit = analogRead(A0);          // 1024=dunkel, klein=hell
+    if (helligkeit > 1010) helligkeit = 1010;
+    analogWrite(ledPin, helligkeit);       // FALSCH: hoher A0 = dunkel,
+                                           // aber hoher PWM = auch dunkel
+                                           // -> im Hellen bleibt Display dunkel!
+
+UMBAU VON DESK_TOP_WIDGET_II_OPT -> ERLEDIGT
+==============================================
+Der Umbau wurde in Desk_Top_Widget_II_opt_G4 umgesetzt:
+
+1. WiFi Keep-Alive alle 3 Minuten (nicht-blockierend via State Machine)
+2. Vereinfachte WLAN-Auswahl (ssid1 bei DEBUG, sonst ssid2)
+3. Korrekte Helligkeitssteuerung (invertierte LDR-Logik)
+4. Taegliche Aktualisierung um 17:00 (EZB-Kurse nach 16:00 aktuell)
+5. WiFi-Status: Staedtezeiten ROT bei Verbindungsfehler
+6. Wechselkurse ausgeblendet wenn Laden fehlgeschlagen
+7. WiFi nach Setup getrennt, nur fuer Keep-Alive/Update verbunden
+8. HTTP-Fallback fuer Zeitsynchronisation (NTP/UDP Port 123 wird
+   von vielen 4G-Providern blockiert). Loesung: syncTime() versucht
+   zuerst NTP, dann HTTP Date-Header von google.com (HTTPS/TCP 443)
+
+Details siehe Desk_Top_Widget_II_opt_G4/README.md
+
+DATEIEN
+=======
+Widget_II_Routertest.ino  - Arduino-Hauptprogramm (Testprogramm)
+PROJEKT_BESCHREIBUNG.txt  - Diese Datei
